@@ -1,0 +1,10 @@
+[Unit]
+Description=Fatt
+After=multi-user.target
+
+[Service]
+Type=idle
+ExecStart=/usr/bin/python3 /opt/fatt/fatt.py -i eth0 -j -o /var/log/fatt.json
+
+[Install]
+WantedBy=multi-user.target
