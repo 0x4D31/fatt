@@ -76,11 +76,11 @@ def process_packet(packet, jlog, fingerprint, pout):
             if pout:
                 print_result(record, 'hassh')
         # Server HASSH
-        """elif int(packet.tcp.srcport) < int(packet.tcp.dstport):
+        elif int(packet.tcp.srcport) < int(packet.tcp.dstport):
             record = server_hassh(packet)
             # Print the result
             if pout:
-                print_result(record, 'hasshServer')"""
+                print_result(record, 'hasshServer')
         if record and jlog:
             logger.info(json.dumps(record))
         return
@@ -108,11 +108,11 @@ def process_packet(packet, jlog, fingerprint, pout):
             # Print the result
             if pout:
                 print_result(record, 'ja3')
-        # elif htype == '2':
-        #    record = server_ja3(packet)
+        elif htype == '2':
+            record = server_ja3(packet)
             # Print the result
-        #    if pout:
-        #        print_result(record, 'ja3s')
+            if pout:
+                print_result(record, 'ja3s')
         if record and jlog:
             logger.info(json.dumps(record))
         return
@@ -312,21 +312,57 @@ def client_ja3(packet):
               "destinationIp": packet.ip.dst,
               "sourcePort": packet.tcp.srcport,
               "destinationPort": packet.tcp.dstport,
-              "server_name": server_name,
+              "serverName": server_name,
               "ja3": ja3,
-              "ja3_string": ja3_string,
-              "ja3_version": ssl_version,
-              "ja3_ciphers": ciphers,
-              "ja3_extensions": extensions,
-              "ja3_ec": elliptic_curve,
-              "ja3_ec_fmt": ec_pointformat}
+              "ja3Algorithms": ja3_string,
+              "ja3Version": ssl_version,
+              "ja3Ciphers": ciphers,
+              "ja3Extensions": extensions,
+              "ja3Ec": elliptic_curve,
+              "ja3EcFmt": ec_pointformat}
     return record
 
 
 def server_ja3(packet):
+    # GREASE_TABLE Ref: https://tools.ietf.org/html/draft-davidben-tls-grease-00
+    GREASE_TABLE = ['2570', '6682', '10794', '14906', '19018', '23130',
+                    '27242', '31354', '35466', '39578', '43690', '47802',
+                    '51914', '56026', '60138', '64250']
     # ja3s fields
-    # TODO
-    return
+    ssl_version = ciphers = extensions = ''
+    if 'handshake_version' in packet.ssl.field_names:
+        ssl_version = int(packet.ssl.handshake_version, 16)
+        ssl_version = str(ssl_version)
+    if 'handshake_ciphersuite' in packet.ssl.field_names:
+        cipher_list = [
+            c.show for c in packet.ssl.handshake_ciphersuite.fields
+            if c.show not in GREASE_TABLE]
+        ciphers = '-'.join(cipher_list)
+    if 'handshake_extension_type' in packet.ssl.field_names:
+        extension_list = [
+            e.show for e in packet.ssl.handshake_extension_type.fields
+            if e.show not in GREASE_TABLE]
+        extensions = '-'.join(extension_list)
+    # TODO: add other non-ja3s fields
+    server_name = ""
+    if 'handshake_extensions_server_name' in packet.ssl.field_names:
+        server_name = packet.ssl.handshake_extensions_server_name
+    # Create ja3s
+    ja3s_string = ','.join([
+        ssl_version, ciphers, extensions])
+    ja3s = md5(ja3s_string.encode()).hexdigest()
+    record = {"timestamp": packet.sniff_time.isoformat(),
+              "sourceIp": packet.ip.src,
+              "destinationIp": packet.ip.dst,
+              "sourcePort": packet.tcp.srcport,
+              "destinationPort": packet.tcp.dstport,
+              "serverName": server_name,
+              "ja3s": ja3s,
+              "ja3sAlgorithms": ja3s_string,
+              "ja3sVersion": ssl_version,
+              "ja3sCiphers": ciphers,
+              "ja3sExtensions": extensions}
+    return record
 
 
 def client_rdfp(packet):
@@ -550,9 +586,9 @@ def print_result(record, fp):
                             record['sourcePort'],
                             record['destinationIp'],
                             record['destinationPort'],
-                            record['server_name'],
+                            record['serverName'],
                             record['ja3'],
-                            record['ja3_string'])
+                            record['ja3Algorithms'])
     elif fp == 'ja3s':
         tmp = textwrap.dedent("""\
                     [+] ServerHello detected
