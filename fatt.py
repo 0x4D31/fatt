@@ -25,13 +25,13 @@ CAP_BPF_FILTER = ('tcp port 22 or tcp port 2222 or tcp port 3389 or '
                   'tcp port 443 or tcp port 993 or tcp port 995 or '
                   'tcp port 636 or tcp port 990 or tcp port 992 or '
                   'tcp port 989 or tcp port 563 or tcp port 614 or '
-                  'tcp port 3306')
+                  'tcp port 3306 or tcp port 80')
 DECODE_AS = {'tcp.port==2222': 'ssh', 'tcp.port==3389': 'tpkt',
              'tcp.port==993': 'ssl', 'tcp.port==995': 'ssl',
              'tcp.port==990': 'ssl', 'tcp.port==992': 'ssl',
              'tcp.port==989': 'ssl', 'tcp.port==563': 'ssl',
              'tcp.port==614': 'ssl', 'tcp.port==636': 'ssl'}
-PROTOCOLS = ['SSL', 'SSH', 'RDP', 'MYSQL']
+PROTOCOLS = ['SSL', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL']
 HASSH_VERSION = '1.0'
 RDFP_VERSION = '0.1'
 
@@ -141,10 +141,26 @@ def process_packet(packet, jlog, fingerprint, pout):
         record = client_rdfp(packet)
         # Print the result
         if pout:
-                print_result(record, 'rdfp')
+            print_result(record, 'rdfp')
         if record and jlog:
             logger.info(json.dumps(record))
-        return
+
+    # [ HTTP ]
+    elif (proto == 'HTTP' or proto == 'DATA-TEXT-LINES') and \
+         (fingerprint == 'http' or fingerprint == 'all'):
+        if 'request' in packet.http.field_names:
+            record = client_http(packet)
+            # Print the result
+            if pout:
+                print_result(record, 'client_http')
+        elif 'response' in packet.http.field_names:
+            record = server_http(packet)
+            # Print the result
+            if pout:
+                print_result(record, 'server_http')
+        if record and jlog:
+            logger.info(json.dumps(record))
+    return
 
 
 def client_hassh(packet):
@@ -530,6 +546,46 @@ def client_rdfp(packet):
     return record
 
 
+def client_http(packet):
+    REQ_WL = ['', '_ws_expert', 'chat', '_ws_expert_message',
+              '_ws_expert_severity', '_ws_expert_group', 'request_method',
+              'request_uri', 'request_version', 'request_line','request_full_uri',
+              'request', 'request_number', 'prev_request_in']
+    req_headers = [i for i in packet.http.field_names if i not in REQ_WL]
+    client_header_ordering = ','.join(req_headers)
+    client_header_hash = md5(client_header_ordering.encode('utf-8')).hexdigest()
+    record = {"timestamp": packet.sniff_time.isoformat(),
+              "sourceIp": packet.ip.src,
+              "destinationIp": packet.ip.dst,
+              "sourcePort": packet.tcp.srcport,
+              "destinationPort": packet.tcp.dstport,
+              "userAgent": packet.http.user_agent,
+              "clientHeaderOrder": client_header_ordering,
+              "clientHeaderHash": client_header_hash}
+    return record
+
+
+def server_http(packet):
+    RESP_WL = ['', '_ws_expert', 'chat', '_ws_expert_message',
+               '_ws_expert_severity', '_ws_expert_group', 'response_version',
+               'response_code', 'response_code_desc', 'response_phrase',
+               'response_line', 'content_length_header', 'response',
+               'response_number', 'time', 'request_in', 'response_for_uri',
+               'file_data', 'prev_request_in', 'prev_response_in']
+    resp_headers = [i for i in packet.http.field_names if i not in RESP_WL]
+    server_header_ordering = ','.join(resp_headers)
+    server_header_hash = md5(server_header_ordering.encode('utf-8')).hexdigest()
+    record = {"timestamp": packet.sniff_time.isoformat(),
+              "sourceIp": packet.ip.src,
+              "destinationIp": packet.ip.dst,
+              "sourcePort": packet.tcp.srcport,
+              "destinationPort": packet.tcp.dstport,
+              "server": packet.http.server,
+              "serverHeaderOrder": server_header_ordering,
+              "serverHeaderHash": server_header_hash}
+    return record
+
+
 def event_log(packet, event):
     """log the anomalous packets"""
     if event == "retransmission":
@@ -615,6 +671,34 @@ def print_result(record, fp):
                             record['cookie'],
                             record['rdfp'],
                             record['rdfpAlgorithms'])
+    elif fp == 'client_http':
+        tmp = textwrap.dedent("""\
+                    [+] HTTP Request message detected
+                        [ {}:{} -> {}:{} ]
+                            [-] User-Agent: {}
+                            [-] Client Header Ordering: {}
+                            [-] Client Header Hash: {}""").format(
+                            record['sourceIp'],
+                            record['sourcePort'],
+                            record['destinationIp'],
+                            record['destinationPort'],
+                            record['userAgent'],
+                            record['clientHeaderOrder'],
+                            record['clientHeaderHash'])
+    elif fp == 'server_http':
+        tmp = textwrap.dedent("""\
+                    [+] HTTP Response message detected
+                        [ {}:{} -> {}:{} ]
+                            [-] User-Agent: {}
+                            [-] Server Header Ordering: {}
+                            [-] Server Header Hash: {}""").format(
+                            record['sourceIp'],
+                            record['sourcePort'],
+                            record['destinationIp'],
+                            record['destinationPort'],
+                            record['server'],
+                            record['serverHeaderOrder'],
+                            record['serverHeaderHash'])
     print(tmp)
 
 
@@ -633,7 +717,7 @@ def parse_cmd_args():
         '-fp',
         '--fingerprint',
         default='all',
-        choices=['ja3', 'ja3s', 'hassh', 'hasshServer', 'rdfp'],
+        choices=['ja3', 'ja3s', 'hassh', 'hasshServer', 'rdfp', 'http'],
         help=helptxt)
     helptxt = "a dictionary of {decode_criterion_string: decode_as_protocol} \
         that are used to tell tshark to decode protocols in situations it \
