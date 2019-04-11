@@ -27,19 +27,20 @@ CAP_BPF_FILTER = ('tcp port 22 or tcp port 2222 or tcp port 3389 or '
                   'tcp port 989 or tcp port 563 or tcp port 614 or '
                   'tcp port 3306 or tcp port 80')
 DECODE_AS = {'tcp.port==2222': 'ssh', 'tcp.port==3389': 'tpkt',
-             'tcp.port==993': 'ssl', 'tcp.port==995': 'ssl',
-             'tcp.port==990': 'ssl', 'tcp.port==992': 'ssl',
-             'tcp.port==989': 'ssl', 'tcp.port==563': 'ssl',
-             'tcp.port==614': 'ssl', 'tcp.port==636': 'ssl'}
-PROTOCOLS = ['SSL', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL']
+             'tcp.port==993': 'tls', 'tcp.port==995': 'tls',
+             'tcp.port==990': 'tls', 'tcp.port==992': 'tls',
+             'tcp.port==989': 'tls', 'tcp.port==563': 'tls',
+             'tcp.port==614': 'tls', 'tcp.port==636': 'tls'}
+PROTOCOLS = ['TLS', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL']
 HASSH_VERSION = '1.0'
 RDFP_VERSION = '0.1'
 
+# TODO: remove global vars
 protocol_dict = {}
 cookie_dict = {}
+jlog = fingerprint = pout = ''
 
-
-def process_packet(packet, jlog, fingerprint, pout):
+def process_packet(packet):
     logger = logging.getLogger()
     global protocol_dict
     record = None
@@ -85,18 +86,18 @@ def process_packet(packet, jlog, fingerprint, pout):
             logger.info(json.dumps(record))
         return
 
-    # [ SSL/TLS ]
-    elif proto == 'SSL' and (fingerprint == 'ja3' or fingerprint == 'ja3s'
+    # [ tls/TLS ]
+    elif (proto == 'TLS') and (fingerprint == 'ja3' or fingerprint == 'ja3s'
                              or fingerprint == 'all'):
-        if 'record_content_type' not in packet.ssl.field_names:
+        if 'record_content_type' not in packet.tls.field_names:
                 return
         # Content Type: Handshake (22)
-        if packet.ssl.record_content_type != '22':
+        if packet.tls.record_content_type != '22':
             return
         # Handshake Type: Client Hello (1) / Server Hello (2)
-        if 'handshake_type' not in packet.ssl.field_names:
+        if 'handshake_type' not in packet.tls.field_names:
             return
-        htype = packet.ssl.handshake_type
+        htype = packet.tls.handshake_type
         if not (htype == '1' or htype == '2'):
             return
         if ("analysis_retransmission" in packet.tcp.field_names or
@@ -292,33 +293,33 @@ def client_ja3(packet):
                     '51914', '56026', '60138', '64250']
     # ja3 fields
     ssl_version = ciphers = extensions = elliptic_curve = ec_pointformat = ''
-    if 'handshake_version' in packet.ssl.field_names:
-        ssl_version = int(packet.ssl.handshake_version, 16)
+    if 'handshake_version' in packet.tls.field_names:
+        ssl_version = int(packet.tls.handshake_version, 16)
         ssl_version = str(ssl_version)
-    if 'handshake_ciphersuite' in packet.ssl.field_names:
+    if 'handshake_ciphersuite' in packet.tls.field_names:
         cipher_list = [
-            c.show for c in packet.ssl.handshake_ciphersuite.fields
+            c.show for c in packet.tls.handshake_ciphersuite.fields
             if c.show not in GREASE_TABLE]
         ciphers = '-'.join(cipher_list)
-    if 'handshake_extension_type' in packet.ssl.field_names:
+    if 'handshake_extension_type' in packet.tls.field_names:
         extension_list = [
-            e.show for e in packet.ssl.handshake_extension_type.fields
+            e.show for e in packet.tls.handshake_extension_type.fields
             if e.show not in GREASE_TABLE]
         extensions = '-'.join(extension_list)
-    if 'handshake_extensions_supported_group' in packet.ssl.field_names:
+    if 'handshake_extensions_supported_group' in packet.tls.field_names:
         ec_list = [str(int(ec.show, 16)) for ec in
-                   packet.ssl.handshake_extensions_supported_group.fields
+                   packet.tls.handshake_extensions_supported_group.fields
                    if str(int(ec.show, 16)) not in GREASE_TABLE]
         elliptic_curve = '-'.join(ec_list)
-    if 'handshake_extensions_ec_point_format' in packet.ssl.field_names:
+    if 'handshake_extensions_ec_point_format' in packet.tls.field_names:
         ecpf_list = [ecpf.show for ecpf in
-                     packet.ssl.handshake_extensions_ec_point_format.fields
+                     packet.tls.handshake_extensions_ec_point_format.fields
                      if ecpf.show not in GREASE_TABLE]
         ec_pointformat = '-'.join(ecpf_list)
     # TODO: add other non-ja3 fields
     server_name = ""
-    if 'handshake_extensions_server_name' in packet.ssl.field_names:
-        server_name = packet.ssl.handshake_extensions_server_name
+    if 'handshake_extensions_server_name' in packet.tls.field_names:
+        server_name = packet.tls.handshake_extensions_server_name
     # Create ja3
     ja3_string = ','.join([
         ssl_version, ciphers, extensions, elliptic_curve, ec_pointformat])
@@ -346,23 +347,23 @@ def server_ja3(packet):
                     '51914', '56026', '60138', '64250']
     # ja3s fields
     ssl_version = ciphers = extensions = ''
-    if 'handshake_version' in packet.ssl.field_names:
-        ssl_version = int(packet.ssl.handshake_version, 16)
+    if 'handshake_version' in packet.tls.field_names:
+        ssl_version = int(packet.tls.handshake_version, 16)
         ssl_version = str(ssl_version)
-    if 'handshake_ciphersuite' in packet.ssl.field_names:
+    if 'handshake_ciphersuite' in packet.tls.field_names:
         cipher_list = [
-            c.show for c in packet.ssl.handshake_ciphersuite.fields
+            c.show for c in packet.tls.handshake_ciphersuite.fields
             if c.show not in GREASE_TABLE]
         ciphers = '-'.join(cipher_list)
-    if 'handshake_extension_type' in packet.ssl.field_names:
+    if 'handshake_extension_type' in packet.tls.field_names:
         extension_list = [
-            e.show for e in packet.ssl.handshake_extension_type.fields
+            e.show for e in packet.tls.handshake_extension_type.fields
             if e.show not in GREASE_TABLE]
         extensions = '-'.join(extension_list)
     # TODO: add other non-ja3s fields
     server_name = ""
-    if 'handshake_extensions_server_name' in packet.ssl.field_names:
-        server_name = packet.ssl.handshake_extensions_server_name
+    if 'handshake_extensions_server_name' in packet.tls.field_names:
+        server_name = packet.tls.handshake_extensions_server_name
     # Create ja3s
     ja3s_string = ','.join([
         ssl_version, ciphers, extensions])
@@ -758,6 +759,11 @@ def main():
     args = parse_cmd_args()
     setup_logging(args.output_file)
 
+    global jlog, fingerprint, pout
+    jlog = args.json_logging
+    fingerprint = args.fingerprint
+    pout = args.print_output
+
     # Process PCAP file
     if args.read_file:
         cap = pyshark.FileCapture(args.read_file, decode_as=args.decode_as)
@@ -765,9 +771,9 @@ def main():
             for packet in cap:
                 process_packet(
                     packet,
-                    jlog=args.json_logging,
-                    fingerprint=args.fingerprint,
-                    pout=args.print_output)
+                    jlog,
+                    fingerprint,
+                    pout)
             cap.close()
             cap.eventloop.stop()
         except Exception as e:
@@ -786,9 +792,9 @@ def main():
                 for packet in cap:
                     process_packet(
                         packet,
-                        jlog=args.json_logging,
-                        fingerprint=args.fingerprint,
-                        pout=args.print_output)
+                        jlog,
+                        fingerprint,
+                        pout)
                 cap.close()
                 cap.eventloop.stop()
             except Exception as e:
@@ -805,17 +811,17 @@ def main():
             bpf_filter=args.bpf_filter,
             output_file=args.write_pcap)
         try:
-            for packet in cap.sniff_continuously(packet_count=0):
-                # if len(protocol_dict) > 10000:
-                # protocol_dict.clear()
-                process_packet(
-                    packet,
-                    jlog=args.json_logging,
-                    fingerprint=args.fingerprint,
-                    pout=args.print_output)
+            cap.apply_on_packets(process_packet)
+            # for packet in cap.sniff_continuously(packet_count=0):
+            # if len(protocol_dict) > 10000:
+            # protocol_dict.clear()
+            # process_packet(
+            #     packet,
+            #     jlog=args.json_logging,
+            #     fingerprint=args.fingerprint,
+            #     pout=args.print_output)
         except (KeyboardInterrupt, SystemExit):
             print("Exiting..\nBYE o/\n")
-
 
 if __name__ == '__main__':
     main()
