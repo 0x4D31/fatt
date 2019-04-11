@@ -31,7 +31,7 @@ DECODE_AS = {'tcp.port==2222': 'ssh', 'tcp.port==3389': 'tpkt',
              'tcp.port==990': 'tls', 'tcp.port==992': 'tls',
              'tcp.port==989': 'tls', 'tcp.port==563': 'tls',
              'tcp.port==614': 'tls', 'tcp.port==636': 'tls'}
-PROTOCOLS = ['TLS', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL']
+PROTOCOLS = ['TLS', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL', 'GQUIC', 'QUIC']
 HASSH_VERSION = '1.0'
 RDFP_VERSION = '0.1'
 
@@ -162,6 +162,17 @@ def process_packet(packet):
                 print_result(record, 'server_http')
         if record and jlog:
             logger.info(json.dumps(record))
+
+    # [ QUIC ]
+    elif (proto == 'GQUIC') and (fingerprint == 'quic' or fingerprint == 'all'):
+        if 'tag' in packet.gquic.field_names:
+            if packet.gquic.tag == 'CHLO':
+                record = client_gquic(packet)
+                # Print the result
+                if pout:
+                    print_result(record, 'client_gquic')
+            if record and jlog:
+                logger.info(json.dumps(record))
     return
 
 
@@ -617,6 +628,21 @@ def server_http(packet):
     return record
 
 
+def client_gquic(packet):
+    # TODO: log other fields and create an experimental fingerprint
+    record = {"timestamp": packet.sniff_time.isoformat(),
+              "sourceIp": packet.ip.src,
+              "destinationIp": packet.ip.dst,
+              "sourcePort": packet.udp.srcport,
+              "destinationPort": packet.udp.dstport,
+              "protocol": "gquic",
+              "gquic": {
+                  "serverName": packet.gquic.tag_sni,
+                  "userAgent" : packet.gquic.tag_uaid
+              }
+    }
+    return record
+
 def event_log(packet, event):
     """log the anomalous packets"""
     if event == "retransmission":
@@ -730,6 +756,18 @@ def print_result(record, fp):
                             record['http']['server'],
                             record['http']['serverHeaderOrder'],
                             record['http']['serverHeaderHash'])
+    elif fp == 'client_gquic':
+        tmp = textwrap.dedent("""\
+                    [+] GQUIC ClientHello detected
+                        [ {}:{} -> {}:{} ]
+                            [-] User-Agent: {}
+                            [-] ServerName: {}""").format(
+                            record['sourceIp'],
+                            record['sourcePort'],
+                            record['destinationIp'],
+                            record['destinationPort'],
+                            record['gquic']['userAgent'],
+                            record['gquic']['serverName'])
     print(tmp)
 
 
@@ -748,7 +786,7 @@ def parse_cmd_args():
         '-fp',
         '--fingerprint',
         default='all',
-        choices=['ja3', 'ja3s', 'hassh', 'hasshServer', 'rdfp', 'http'],
+        choices=['ja3', 'ja3s', 'hassh', 'hasshServer', 'rdfp', 'http', 'gquic'],
         help=helptxt)
     helptxt = "a dictionary of {decode_criterion_string: decode_as_protocol} \
         that are used to tell tshark to decode protocols in situations it \
@@ -799,11 +837,7 @@ def main():
         cap = pyshark.FileCapture(args.read_file, decode_as=args.decode_as)
         try:
             for packet in cap:
-                process_packet(
-                    packet,
-                    jlog,
-                    fingerprint,
-                    pout)
+                process_packet(packet)
             cap.close()
             cap.eventloop.stop()
         except Exception as e:
@@ -820,11 +854,7 @@ def main():
             cap = pyshark.FileCapture(file, decode_as=args.decode_as)
             try:
                 for packet in cap:
-                    process_packet(
-                        packet,
-                        jlog,
-                        fingerprint,
-                        pout)
+                    process_packet(packet)
                 cap.close()
                 cap.eventloop.stop()
             except Exception as e:
