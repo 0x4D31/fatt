@@ -86,7 +86,7 @@ def process_packet(packet):
             logger.info(json.dumps(record))
         return
 
-    # [ tls/TLS ]
+    # [ TLS ]
     elif (proto == 'TLS') and (fingerprint == 'ja3' or fingerprint == 'ja3s'
                              or fingerprint == 'all'):
         if 'record_content_type' not in packet.tls.field_names:
@@ -292,10 +292,10 @@ def client_ja3(packet):
                     '27242', '31354', '35466', '39578', '43690', '47802',
                     '51914', '56026', '60138', '64250']
     # ja3 fields
-    ssl_version = ciphers = extensions = elliptic_curve = ec_pointformat = ''
+    tls_version = ciphers = extensions = elliptic_curve = ec_pointformat = ''
     if 'handshake_version' in packet.tls.field_names:
-        ssl_version = int(packet.tls.handshake_version, 16)
-        ssl_version = str(ssl_version)
+        tls_version = int(packet.tls.handshake_version, 16)
+        tls_version = str(tls_version)
     if 'handshake_ciphersuite' in packet.tls.field_names:
         cipher_list = [
             c.show for c in packet.tls.handshake_ciphersuite.fields
@@ -322,7 +322,7 @@ def client_ja3(packet):
         server_name = packet.tls.handshake_extensions_server_name
     # Create ja3
     ja3_string = ','.join([
-        ssl_version, ciphers, extensions, elliptic_curve, ec_pointformat])
+        tls_version, ciphers, extensions, elliptic_curve, ec_pointformat])
     ja3 = md5(ja3_string.encode()).hexdigest()
     record = {"timestamp": packet.sniff_time.isoformat(),
               "sourceIp": packet.ip.src,
@@ -332,7 +332,7 @@ def client_ja3(packet):
               "serverName": server_name,
               "ja3": ja3,
               "ja3Algorithms": ja3_string,
-              "ja3Version": ssl_version,
+              "ja3Version": tls_version,
               "ja3Ciphers": ciphers,
               "ja3Extensions": extensions,
               "ja3Ec": elliptic_curve,
@@ -346,10 +346,10 @@ def server_ja3(packet):
                     '27242', '31354', '35466', '39578', '43690', '47802',
                     '51914', '56026', '60138', '64250']
     # ja3s fields
-    ssl_version = ciphers = extensions = ''
+    tls_version = ciphers = extensions = ''
     if 'handshake_version' in packet.tls.field_names:
-        ssl_version = int(packet.tls.handshake_version, 16)
-        ssl_version = str(ssl_version)
+        tls_version = int(packet.tls.handshake_version, 16)
+        tls_version = str(tls_version)
     if 'handshake_ciphersuite' in packet.tls.field_names:
         cipher_list = [
             c.show for c in packet.tls.handshake_ciphersuite.fields
@@ -366,7 +366,7 @@ def server_ja3(packet):
         server_name = packet.tls.handshake_extensions_server_name
     # Create ja3s
     ja3s_string = ','.join([
-        ssl_version, ciphers, extensions])
+        tls_version, ciphers, extensions])
     ja3s = md5(ja3s_string.encode()).hexdigest()
     record = {"timestamp": packet.sniff_time.isoformat(),
               "sourceIp": packet.ip.src,
@@ -376,7 +376,7 @@ def server_ja3(packet):
               "serverName": server_name,
               "ja3s": ja3s,
               "ja3sAlgorithms": ja3s_string,
-              "ja3sVersion": ssl_version,
+              "ja3sVersion": tls_version,
               "ja3sCiphers": ciphers,
               "ja3sExtensions": extensions}
     return record
