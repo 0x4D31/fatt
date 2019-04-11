@@ -6,8 +6,8 @@
 # or https://opensource.org/licenses/BSD-3-Clause
 
 # FATT - Fingerprint All The Things
-# Supported protocols: SSL/TLS, SSH, RDP, MYSQL
-# TODO: support MSSQL, SMB, VNC, MONGO, etc.
+# Supported protocols: SSL/TLS, SSH, RDP, HTTP
+# TODO: add QUIC, MYSQL, MSSQL, SMB, VNC, MONGO, etc.
 
 import argparse
 import pyshark
@@ -87,6 +87,7 @@ def process_packet(packet):
         return
 
     # [ TLS ]
+    # TODO: extract certificate
     elif (proto == 'TLS') and (fingerprint == 'ja3' or fingerprint == 'ja3s'
                              or fingerprint == 'all'):
         if 'record_content_type' not in packet.tls.field_names:
@@ -208,20 +209,24 @@ def client_hassh(packet):
               "destinationIp": packet.ip.dst,
               "sourcePort": packet.tcp.srcport,
               "destinationPort": packet.tcp.dstport,
-              "client": protocol,
-              "hassh": hassh,
-              "hasshAlgorithms": hassh_str,
-              "hasshVersion": HASSH_VERSION,
-              "ckex": ckex,
-              "ceacts": ceacts,
-              "cmacts": cmacts,
-              "ccacts": ccacts,
-              "clcts": clcts,
-              "clstc": clstc,
-              "ceastc": ceastc,
-              "cmastc": cmastc,
-              "ccastc": ccastc,
-              "cshka": cshka}
+              "protocol": 'ssh',
+              "ssh": {
+                  "client": protocol,
+                  "hassh": hassh,
+                  "hasshAlgorithms": hassh_str,
+                  "hasshVersion": HASSH_VERSION,
+                  "ckex": ckex,
+                  "ceacts": ceacts,
+                  "cmacts": cmacts,
+                  "ccacts": ccacts,
+                  "clcts": clcts,
+                  "clstc": clstc,
+                  "ceastc": ceastc,
+                  "cmastc": cmastc,
+                  "ccastc": ccastc,
+                  "cshka": cshka
+              }
+    }
     return record
 
 
@@ -269,20 +274,24 @@ def server_hassh(packet):
               "destinationIp": packet.ip.dst,
               "sourcePort": packet.tcp.srcport,
               "destinationPort": packet.tcp.dstport,
-              "server": protocol,
-              "hasshServer": hasshs,
-              "hasshServerAlgorithms": hasshs_str,
-              "hasshVersion": HASSH_VERSION,
-              "skex": skex,
-              "seastc": seastc,
-              "smastc": smastc,
-              "scastc": scastc,
-              "slcts": slcts,
-              "slstc": slstc,
-              "seacts": seacts,
-              "smacts": smacts,
-              "scacts": scacts,
-              "sshka": sshka}
+              "protocol": 'ssh',
+              "ssh": {
+                  "server": protocol,
+                  "hasshServer": hasshs,
+                  "hasshServerAlgorithms": hasshs_str,
+                  "hasshVersion": HASSH_VERSION,
+                  "skex": skex,
+                  "seastc": seastc,
+                  "smastc": smastc,
+                  "scastc": scastc,
+                  "slcts": slcts,
+                  "slstc": slstc,
+                  "seacts": seacts,
+                  "smacts": smacts,
+                  "scacts": scacts,
+                  "sshka": sshka
+              }
+    }
     return record
 
 
@@ -329,14 +338,18 @@ def client_ja3(packet):
               "destinationIp": packet.ip.dst,
               "sourcePort": packet.tcp.srcport,
               "destinationPort": packet.tcp.dstport,
-              "serverName": server_name,
-              "ja3": ja3,
-              "ja3Algorithms": ja3_string,
-              "ja3Version": tls_version,
-              "ja3Ciphers": ciphers,
-              "ja3Extensions": extensions,
-              "ja3Ec": elliptic_curve,
-              "ja3EcFmt": ec_pointformat}
+              "protocol": "tls",
+              "tls": {
+                  "serverName": server_name,
+                  "ja3": ja3,
+                  "ja3Algorithms": ja3_string,
+                  "ja3Version": tls_version,
+                  "ja3Ciphers": ciphers,
+                  "ja3Extensions": extensions,
+                  "ja3Ec": elliptic_curve,
+                  "ja3EcFmt": ec_pointformat
+              }
+    }
     return record
 
 
@@ -373,12 +386,16 @@ def server_ja3(packet):
               "destinationIp": packet.ip.dst,
               "sourcePort": packet.tcp.srcport,
               "destinationPort": packet.tcp.dstport,
-              "serverName": server_name,
-              "ja3s": ja3s,
-              "ja3sAlgorithms": ja3s_string,
-              "ja3sVersion": tls_version,
-              "ja3sCiphers": ciphers,
-              "ja3sExtensions": extensions}
+              "protocol": "tls",
+              "tls": {
+                  "serverName": server_name,
+                  "ja3s": ja3s,
+                  "ja3sAlgorithms": ja3s_string,
+                  "ja3sVersion": tls_version,
+                  "ja3sCiphers": ciphers,
+                  "ja3sExtensions": extensions
+              }
+    }
     return record
 
 
@@ -514,40 +531,44 @@ def client_rdfp(packet):
               "destinationIp": packet.ip.dst,
               "sourcePort": packet.tcp.srcport,
               "destinationPort": packet.tcp.dstport,
-              "cookie": cookie,
-              "rdfp": rdfp,
-              "rdfpAlgorithms": rdfp_str,
-              "rdfpVersion": RDFP_VERSION,
-              "verMajor": verMajor,
-              "verMinor": verMinor,
-              "desktopWidth": desktopWidth,
-              "desktopHeight": desktopHeight,
-              "colorDepth": colorDepth,
-              "sasSequence": sasSequence,
-              "keyboardLayout": keyboardLayout,
-              "clientBuild": clientBuild,
-              "clientName": clientName,
-              "keyboardSubtype": keyboardSubtype,
-              "keyboardType": keyboardType,
-              "keyboardFuncKey": keyboardFuncKey,
-              "postbeta2ColorDepth": postbeta2ColorDepth,
-              "clientProductId": clientProductId,
-              "serialNumber": serialNumber,
-              "highColorDepth": highColorDepth,
-              "supportedColorDepths": supportedColorDepths,
-              "earlyCapabilityFlags": earlyCapabilityFlags,
-              "clientDigProductId": clientDigProductId,
-              "connectionType": connectionType,
-              "pad1Octet": pad1Octet,
-              "clusterFlags": clusterFlags_tmp,
-              "encryptionMethods": encryptionMethods_tmp,
-              "extEncMethods": extEncMethods_tmp,
-              "channelDef": channelDef_bin
+              "protocol": "rdp",
+              "rdp": {
+                  "cookie": cookie,
+                  "rdfp": rdfp,
+                  "rdfpAlgorithms": rdfp_str,
+                  "rdfpVersion": RDFP_VERSION,
+                  "verMajor": verMajor,
+                  "verMinor": verMinor,
+                  "desktopWidth": desktopWidth,
+                  "desktopHeight": desktopHeight,
+                  "colorDepth": colorDepth,
+                  "sasSequence": sasSequence,
+                  "keyboardLayout": keyboardLayout,
+                  "clientBuild": clientBuild,
+                  "clientName": clientName,
+                  "keyboardSubtype": keyboardSubtype,
+                  "keyboardType": keyboardType,
+                  "keyboardFuncKey": keyboardFuncKey,
+                  "postbeta2ColorDepth": postbeta2ColorDepth,
+                  "clientProductId": clientProductId,
+                  "serialNumber": serialNumber,
+                  "highColorDepth": highColorDepth,
+                  "supportedColorDepths": supportedColorDepths,
+                  "earlyCapabilityFlags": earlyCapabilityFlags,
+                  "clientDigProductId": clientDigProductId,
+                  "connectionType": connectionType,
+                  "pad1Octet": pad1Octet,
+                  "clusterFlags": clusterFlags_tmp,
+                  "encryptionMethods": encryptionMethods_tmp,
+                  "extEncMethods": extEncMethods_tmp,
+                  "channelDef": channelDef_bin
               }
+    }
     return record
 
 
 def client_http(packet):
+    # TODO: log full http req header
     REQ_WL = ['', '_ws_expert', 'chat', '_ws_expert_message',
               '_ws_expert_severity', '_ws_expert_group', 'request_method',
               'request_uri', 'request_version', 'request_line','request_full_uri',
@@ -560,13 +581,18 @@ def client_http(packet):
               "destinationIp": packet.ip.dst,
               "sourcePort": packet.tcp.srcport,
               "destinationPort": packet.tcp.dstport,
-              "userAgent": packet.http.user_agent,
-              "clientHeaderOrder": client_header_ordering,
-              "clientHeaderHash": client_header_hash}
+              "protocol": "http",
+              "http": {
+                  "userAgent": packet.http.user_agent,
+                  "clientHeaderOrder": client_header_ordering,
+                  "clientHeaderHash": client_header_hash
+              }
+    }
     return record
 
 
 def server_http(packet):
+    # TODO: log full http resp header
     RESP_WL = ['', '_ws_expert', 'chat', '_ws_expert_message',
                '_ws_expert_severity', '_ws_expert_group', 'response_version',
                'response_code', 'response_code_desc', 'response_phrase',
@@ -581,9 +607,13 @@ def server_http(packet):
               "destinationIp": packet.ip.dst,
               "sourcePort": packet.tcp.srcport,
               "destinationPort": packet.tcp.dstport,
-              "server": packet.http.server,
-              "serverHeaderOrder": server_header_ordering,
-              "serverHeaderHash": server_header_hash}
+              "protocol": "http",
+              "http": {
+                  "server": packet.http.server,
+                  "serverHeaderOrder": server_header_ordering,
+                  "serverHeaderHash": server_header_hash
+              }
+    }
     return record
 
 
@@ -615,9 +645,9 @@ def print_result(record, fp):
                             record['sourcePort'],
                             record['destinationIp'],
                             record['destinationPort'],
-                            record['client'],
-                            record['hassh'],
-                            record['hasshAlgorithms'])
+                            record['ssh']['client'],
+                            record['ssh']['hassh'],
+                            record['ssh']['hasshAlgorithms'])
     elif fp == 'hasshServer':
         tmp = textwrap.dedent("""\
                     [+] Server SSH_MSG_KEXINIT detected
@@ -629,12 +659,12 @@ def print_result(record, fp):
                             record['sourcePort'],
                             record['destinationIp'],
                             record['destinationPort'],
-                            record['server'],
-                            record['hasshServer'],
-                            record['hasshServerAlgorithms'])
+                            record['ssh']['server'],
+                            record['ssh']['hasshServer'],
+                            record['ssh']['hasshServerAlgorithms'])
     elif fp == 'ja3':
         tmp = textwrap.dedent("""\
-                    [+] ClientHello detected
+                    [+] TLS ClientHello detected
                         [ {}:{} -> {}:{} ]
                             [-] ServerName: {}
                             [-] ja3: {}
@@ -643,12 +673,12 @@ def print_result(record, fp):
                             record['sourcePort'],
                             record['destinationIp'],
                             record['destinationPort'],
-                            record['serverName'],
-                            record['ja3'],
-                            record['ja3Algorithms'])
+                            record['tls']['serverName'],
+                            record['tls']['ja3'],
+                            record['tls']['ja3Algorithms'])
     elif fp == 'ja3s':
         tmp = textwrap.dedent("""\
-                    [+] ServerHello detected
+                    [+] TLS ServerHello detected
                         [ {}:{} -> {}:{} ]
                             [-] ja3s: {}
                             [-] ja3s Algorithms: {}""").format(
@@ -656,8 +686,8 @@ def print_result(record, fp):
                             record['sourcePort'],
                             record['destinationIp'],
                             record['destinationPort'],
-                            record['ja3s'],
-                            record['ja3sAlgorithms'])
+                            record['tls']['ja3s'],
+                            record['tls']['ja3sAlgorithms'])
     elif fp == 'rdfp':
         tmp = textwrap.dedent("""\
                     [+] RDP ClientData message detected
@@ -669,9 +699,9 @@ def print_result(record, fp):
                             record['sourcePort'],
                             record['destinationIp'],
                             record['destinationPort'],
-                            record['cookie'],
-                            record['rdfp'],
-                            record['rdfpAlgorithms'])
+                            record['rdp']['cookie'],
+                            record['rdp']['rdfp'],
+                            record['rdp']['rdfpAlgorithms'])
     elif fp == 'client_http':
         tmp = textwrap.dedent("""\
                     [+] HTTP Request message detected
@@ -683,9 +713,9 @@ def print_result(record, fp):
                             record['sourcePort'],
                             record['destinationIp'],
                             record['destinationPort'],
-                            record['userAgent'],
-                            record['clientHeaderOrder'],
-                            record['clientHeaderHash'])
+                            record['http']['userAgent'],
+                            record['http']['clientHeaderOrder'],
+                            record['http']['clientHeaderHash'])
     elif fp == 'server_http':
         tmp = textwrap.dedent("""\
                     [+] HTTP Response message detected
@@ -697,9 +727,9 @@ def print_result(record, fp):
                             record['sourcePort'],
                             record['destinationIp'],
                             record['destinationPort'],
-                            record['server'],
-                            record['serverHeaderOrder'],
-                            record['serverHeaderHash'])
+                            record['http']['server'],
+                            record['http']['serverHeaderOrder'],
+                            record['http']['serverHeaderHash'])
     print(tmp)
 
 
