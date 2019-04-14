@@ -25,17 +25,24 @@ CAP_BPF_FILTER = (
     'tcp port 443 or tcp port 993 or tcp port 995 or '
     'tcp port 636 or tcp port 990 or tcp port 992 or '
     'tcp port 989 or tcp port 563 or tcp port 614 or '
-    'tcp port 3306 or tcp port 80')
+    'tcp port 3306 or tcp port 80 or udp port 80 or '
+    'udp port 443')
+DISPLAY_FILTER = (
+    'tls.handshake.type == 1 || tls.handshake.type == 2 ||'
+    'ssh.message_code == 20 || ssh.protocol || rdp.rt_cookie ||'
+    'rdp.header.type == 0xc001 || gquic.tag == "CHLO" ||'
+    'http.request.method || data-text-lines'
+)
 DECODE_AS = {
     'tcp.port==2222': 'ssh', 'tcp.port==3389': 'tpkt',
      'tcp.port==993': 'tls', 'tcp.port==995': 'tls',
      'tcp.port==990': 'tls', 'tcp.port==992': 'tls',
      'tcp.port==989': 'tls', 'tcp.port==563': 'tls',
      'tcp.port==614': 'tls', 'tcp.port==636': 'tls'}
-PROTOCOLS = [
-    'TLS', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL', 'GQUIC', 'QUIC']
 HASSH_VERSION = '1.0'
 RDFP_VERSION = '0.1'
+#PROTOCOLS = [
+#    'TLS', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL', 'GQUIC', 'QUIC']
 
 
 class ProcessPackets:
@@ -52,8 +59,15 @@ class ProcessPackets:
     def process(self, packet):
         record = None
         proto = packet.highest_layer
-        if proto not in PROTOCOLS:
-            return
+        # if proto not in PROTOCOLS:
+        #    return
+
+        # Clear the dictionary used for extracting ssh protocol strings
+        # and rdp cookies
+        if len(self.protocol_dict) > 100 and proto != 'SSH':
+            self.protocol_dict.clear()
+        if len(self.cookie_dict) > 100 and proto != 'RDP':
+            self.cookie_dict.clear()
 
         # [ SSH ]
         if proto == 'SSH' and ('ssh' in self.fingerprint or
@@ -201,6 +215,7 @@ class ProcessPackets:
                 print(tmp)
             if record and self.jlog:
                 self.logger.info(json.dumps(record))
+            return
 
         # [ HTTP ]
         elif (proto == 'HTTP' or proto == 'DATA-TEXT-LINES') and \
@@ -235,6 +250,7 @@ class ProcessPackets:
                     print(tmp)
             if record and self.jlog:
                 self.logger.info(json.dumps(record))
+            return
 
         # [ QUIC ]
         elif (proto == 'GQUIC' or proto == 'QUIC') and\
@@ -256,6 +272,7 @@ class ProcessPackets:
                         print(tmp)
                 if record and self.jlog:
                     self.logger.info(json.dumps(record))
+                return
         return
 
     def client_hassh(self, packet):
@@ -419,7 +436,7 @@ class ProcessPackets:
                          if ecpf.show not in GREASE_TABLE]
             ec_pointformat = '-'.join(ecpf_list)
         # TODO: log other non-ja3 fields
-        server_name = ""
+        server_name = None
         if 'handshake_extensions_server_name' in packet.tls.field_names:
             server_name = packet.tls.handshake_extensions_server_name
         # Create ja3
@@ -467,9 +484,6 @@ class ProcessPackets:
                 if e.show not in GREASE_TABLE]
             extensions = '-'.join(extension_list)
         # TODO: log other non-ja3s fields
-        server_name = ""
-        if 'handshake_extensions_server_name' in packet.tls.field_names:
-            server_name = packet.tls.handshake_extensions_server_name
         # Create ja3s
         ja3s_string = ','.join([
             tls_version, ciphers, extensions])
@@ -481,7 +495,6 @@ class ProcessPackets:
                   "destinationPort": packet.tcp.dstport,
                   "protocol": "tls",
                   "tls": {
-                      "serverName": server_name,
                       "ja3s": ja3s,
                       "ja3sAlgorithms": ja3s_string,
                       "ja3sVersion": tls_version,
@@ -668,9 +681,11 @@ class ProcessPackets:
                   'request_full_uri',
                   'request', 'request_number', 'prev_request_in']
         req_headers = [i for i in packet.http.field_names if i not in REQ_WL]
+        ua = None
+        if 'user_agent' in req_headers:
+            ua = packet.http.user_agent
         client_header_ordering = ','.join(req_headers)
-        client_header_hash = md5(
-            client_header_ordering.encode('utf-8')).hexdigest()
+        client_header_hash = md5(client_header_ordering.encode('utf-8')).hexdigest()
         record = {"timestamp": packet.sniff_time.isoformat(),
                   "sourceIp": packet.ip.src,
                   "destinationIp": packet.ip.dst,
@@ -678,7 +693,7 @@ class ProcessPackets:
                   "destinationPort": packet.tcp.dstport,
                   "protocol": "http",
                   "http": {
-                      "userAgent": packet.http.user_agent,
+                      "userAgent": ua,
                       "clientHeaderOrder": client_header_ordering,
                       "clientHeaderHash": client_header_hash
                   }
@@ -810,7 +825,11 @@ def main():
 
     # Process PCAP file
     if args.read_file:
-        cap = pyshark.FileCapture(args.read_file, decode_as=args.decode_as)
+        cap = pyshark.FileCapture(
+            args.read_file,
+            display_filter=DISPLAY_FILTER,
+            keep_packets=False,
+            decode_as=args.decode_as)
         try:
             for packet in cap:
                 pp.process(packet)
@@ -819,7 +838,6 @@ def main():
         except Exception as e:
             print('Error: {}'.format(e))
             pass
-
     # Process directory of PCAP files
     elif args.read_directory:
         files = [f.path for f in os.scandir(args.read_directory)
@@ -827,7 +845,11 @@ def main():
                  and (f.name.endswith(".pcap") or f.name.endswith(".pcapng")
                  or f.name.endswith(".cap"))]
         for file in files:
-            cap = pyshark.FileCapture(file, decode_as=args.decode_as)
+            cap = pyshark.FileCapture(
+                file,
+                display_filter=DISPLAY_FILTER,
+                keep_packets=False,
+                decode_as=args.decode_as)
             try:
                 for packet in cap:
                     pp.process(packet)
@@ -844,13 +866,12 @@ def main():
         cap = pyshark.LiveCapture(
             interface=args.interface,
             decode_as=args.decode_as,
+            display_filter=DISPLAY_FILTER,
             bpf_filter=args.bpf_filter,
             output_file=args.write_pcap)
         try:
             cap.apply_on_packets(pp.process)
             # for packet in cap.sniff_continuously(packet_count=0):
-            # if len(protocol_dict) > 10000:
-            # protocol_dict.clear()
             # process_packet(
             #     packet,
             #     jlog=args.json_logging,
