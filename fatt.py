@@ -260,14 +260,16 @@ class ProcessPackets:
                     record = self.client_gquic(packet)
                     # Print the result
                     if self.pout:
-                        tmp = ('{sip}:{sp} -> {dip}:{dp} [QUIC] userAgent="{ua}" serverName={sn}')
+                        tmp = ('{sip}:{sp} -> {dip}:{dp} [QUIC] UAID="{ua}" SNI={sn} AEAD={ea} KEXS={kex}')
                         tmp = tmp.format(
                             sip=record['sourceIp'],
                             sp=record['sourcePort'],
                             dip=record['destinationIp'],
                             dp=record['destinationPort'],
-                            ua=record['gquic']['userAgent'],
-                            sn=record['gquic']['serverName'],
+                            ua=record['gquic']['uaid'],
+                            sn=record['gquic']['sni'],
+                            ea=record['gquic']['aead'],
+                            kex=record['gquic']['kexs']
                         )
                         print(tmp)
                 if record and self.jlog:
@@ -730,7 +732,39 @@ class ProcessPackets:
 
 
     def client_gquic(self, packet):
-        # TODO: log other fields and create an experimental fingerprint
+        # https://tools.ietf.org/html/draft-ietf-quic-transport-20
+        sni = uaid = ver = stk = pdmd = ccs = ccrt = aead = scid= smhl = mids \
+            = kexs = xlct = copt = ccrt = None
+        if 'tag_sni' in packet.gquic.field_names:
+            sni = packet.gquic.tag_sni
+        if 'tag_uaid' in packet.gquic.field_names:
+            uaid = packet.gquic.tag_uaid
+        if 'tag_version' in packet.gquic.field_names:
+            ver = packet.gquic.tag_version
+        if 'tag_stk' in packet.gquic.field_names:
+            stk = packet.gquic.tag_stk.raw_value
+        if 'tag_pdmd' in packet.gquic.field_names:
+            pdmd = packet.gquic.tag_pdmd
+        if 'tag_ccs' in packet.gquic.field_names:
+            ccs = packet.gquic.tag_ccs.raw_value
+        if 'tag_ccrt' in packet.gquic.field_names:
+            ccrt = packet.gquic.tag_ccrt.raw_value
+        if 'tag_aead' in packet.gquic.field_names:
+            aead = packet.gquic.tag_aead
+        if 'tag_scid' in packet.gquic.field_names:
+            scid = packet.gquic.tag_scid.raw_value
+        if 'tag_smhl' in packet.gquic.field_names:
+            smhl = packet.gquic.tag_smhl
+        if 'tag_mids' in packet.gquic.field_names:
+            mids = packet.gquic.tag_mids
+        if 'tag_kexs' in packet.gquic.field_names:
+            kexs = packet.gquic.tag_kexs
+        if 'tag_xlct' in packet.gquic.field_names:
+            xlct = packet.gquic.tag_xlct.raw_value
+        if 'tag_copt' in packet.gquic.field_names:
+            copt= packet.gquic.tag_copt
+        if 'tag_ccrt' in packet.gquic.field_names:
+            ccrt = packet.gquic.tag_ccrt.raw_value
         record = {"timestamp": packet.sniff_time.isoformat(),
                   "sourceIp": packet.ip.src,
                   "destinationIp": packet.ip.dst,
@@ -738,8 +772,24 @@ class ProcessPackets:
                   "destinationPort": packet.udp.dstport,
                   "protocol": "gquic",
                   "gquic": {
-                      "serverName": packet.gquic.tag_sni,
-                      "userAgent": packet.gquic.tag_uaid
+                      "tagNumber": packet.gquic.tag_number,
+                      "sni": sni,
+                      "uaid": uaid,
+                      "ver": ver,
+                      "aead": aead,
+                      "smhl": smhl,
+                      "mids": mids,
+                      "kexs": kexs,
+                      "xlct": xlct,
+                      "copt": copt,
+                      "ccrt": ccrt,
+                      # you can uncomment the following fields
+                      # TODO: cfcw, sfcw, irtt, csct, sclc, pubs, icsl, smhl, tcid, scid?!
+                      "stk": stk,
+                      "pdmd": pdmd,
+                      "ccs": ccs,
+                      "ccrt": ccrt,
+                      "scid": scid
                   }
         }
         return record
@@ -826,10 +876,10 @@ def main():
     # Process PCAP file
     if args.read_file:
         cap = pyshark.FileCapture(
-            args.read_file,
-            display_filter=DISPLAY_FILTER,
-            keep_packets=False,
-            decode_as=args.decode_as)
+        args.read_file,
+        display_filter=DISPLAY_FILTER,
+        keep_packets=False,
+        decode_as=args.decode_as)
         try:
             for packet in cap:
                 pp.process(packet)
