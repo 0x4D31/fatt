@@ -4,6 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=idle
+Restart=always
 ExecStart=/usr/bin/python3 /opt/fatt/fatt.py -i eth0 -j -o /var/log/fatt.json
 
 [Install]
