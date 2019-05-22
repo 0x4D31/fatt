@@ -6,8 +6,7 @@
 # or https://opensource.org/licenses/BSD-3-Clause
 
 # FATT - Fingerprint All The Things
-# Supported protocols: SSL/TLS, SSH, RDP, HTTP
-# TODO: add QUIC, MYSQL, MSSQL, SMB, VNC, MONGO, etc.
+# Supported protocols: SSL/TLS, SSH, RDP, HTTP, QUIC
 
 import argparse
 import pyshark
