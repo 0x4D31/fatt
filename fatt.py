@@ -831,7 +831,7 @@ def parse_cmd_args():
         that are used to tell tshark to decode protocols in situations it \
         wouldn't usually."
     parser.add_argument(
-        '-da', '--decode_as', type=dict, default=DECODE_AS, help=helptxt)
+        '-da', '--decode_as', type=json.loads, default=DECODE_AS, help=helptxt)
     helptxt = "BPF capture filter to use (for live capture only).'"
     parser.add_argument(
         '-f', '--bpf_filter', type=str, default=CAP_BPF_FILTER, help=helptxt)
