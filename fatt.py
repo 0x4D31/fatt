@@ -6,7 +6,7 @@
 # or https://opensource.org/licenses/BSD-3-Clause
 
 # FATT - Fingerprint All The Things
-# Supported protocols: SSL/TLS, SSH, RDP, HTTP, QUIC
+# Supported protocols: SSL/TLS, SSH, RDP, HTTP, gQUIC, IETF QUIC
 
 import argparse
 import pyshark
@@ -14,6 +14,7 @@ import os
 import json
 import logging
 from hashlib import md5
+from collections import defaultdict
 
 __author__ = "Adel '0x4D31' Karimi"
 __version__ = "0.3"
@@ -52,7 +53,7 @@ class ProcessPackets:
         self.jlog = jlog
         self.pout = pout
         self.protocol_dict = {}
-        self.cookie_dict = {}
+        self.rdp_dict = defaultdict(dict)
 
 
     def process(self, packet):
@@ -65,21 +66,20 @@ class ProcessPackets:
         # and rdp cookies
         if len(self.protocol_dict) > 100 and proto != 'SSH':
             self.protocol_dict.clear()
-        if len(self.cookie_dict) > 100 and proto != 'RDP':
-            self.cookie_dict.clear()
+        if len(self.rdp_dict) > 100 and proto != 'RDP':
+            self.rdp_dict.clear()
 
         # [ SSH ]
         if proto == 'SSH' and ('ssh' in self.fingerprint or
                                self.fingerprint == 'all'):
             # Extract SSH identification string and correlate with KEXINIT msg
             if 'protocol' in packet.ssh.field_names:
-                protocol = packet.ssh.protocol
-                srcip = packet.ip.src
-                dstip = packet.ip.dst
-                sport = packet.tcp.srcport
-                dport = packet.tcp.srcport
-                key = '{}:{}_{}:{}'.format(srcip, sport, dstip, dport)
-                self.protocol_dict[key] = protocol
+                key = '{}:{}_{}:{}'.format(
+                    packet.ip.src,
+                    packet.tcp.srcport,
+                    packet.ip.dst,
+                    packet.tcp.dstport)
+                self.protocol_dict[key] = packet.ssh.protocol
             if 'message_code' not in packet.ssh.field_names:
                 return
             if packet.ssh.message_code != '20':
@@ -180,16 +180,20 @@ class ProcessPackets:
         # [ RDP ]
         elif proto == 'RDP' and ('rdp' in self.fingerprint or
                                  self.fingerprint == 'all'):
-            # Extract RDP cookie and correlate with ClientData msg
-            if 'rt_cookie' in packet.rdp.field_names:
-                cookie_tmp = packet.rdp.rt_cookie
-                cookie = cookie_tmp.replace('Cookie: ', '')
-                srcip = packet.ip.src
-                dstip = packet.ip.dst
-                sport = packet.tcp.srcport
-                dport = packet.tcp.srcport
-                key = '{}:{}_{}:{}'.format(srcip, sport, dstip, dport)
-                self.cookie_dict[key] = cookie
+            # Extract RDP cookie & negotiate request and correlate with ClientData msg
+            key = None
+            if 'rt_cookie' or 'negreq_requestedprotocols':
+                key = '{}:{}_{}:{}'.format(
+                    packet.ip.src,
+                    packet.tcp.srcport,
+                    packet.ip.dst,
+                    packet.tcp.dstport)
+                if 'rt_cookie' in packet.rdp.field_names:
+                    cookie = packet.rdp.rt_cookie.replace('Cookie: ', '')
+                    self.rdp_dict[key]["cookie"] = cookie
+                if 'negreq_requestedprotocols' in packet.rdp.field_names:
+                    req_protos = packet.rdp.negreq_requestedprotocols
+                    self.rdp_dict[key]["req_protos"] = req_protos
             if 'clientdata' not in packet.rdp.field_names:
                 return
             if ("analysis_retransmission" in packet.tcp.field_names or
@@ -202,7 +206,7 @@ class ProcessPackets:
             record = self.client_rdfp(packet)
             # Print the result
             if self.pout:
-                tmp = ('{sip}:{sp} -> {dip}:{dp} [RDP] rdfp={rdfp} cookie={cookie}')
+                tmp = ('{sip}:{sp} -> {dip}:{dp} [RDP] rdfp={rdfp} cookie="{cookie}" req_protocols={proto}')
                 tmp = tmp.format(
                     sip=record['sourceIp'],
                     sp=record['sourcePort'],
@@ -210,6 +214,7 @@ class ProcessPackets:
                     dp=record['destinationPort'],
                     rdfp=record['rdp']['rdfp'],
                     cookie=record['rdp']['cookie'],
+                    proto=record['rdp']['requestedProtocols']
                 )
                 print(tmp)
             if record and self.jlog:
@@ -507,17 +512,8 @@ class ProcessPackets:
 
 
     def client_rdfp(self, packet):
-        """returns ClientData message fields and RDFP
-        RDFP = md5(?)
+        """returns ClientData message fields and RDFP (experimental fingerprint)
         """
-        srcip = packet.ip.src
-        dstip = packet.ip.dst
-        sport = packet.tcp.srcport
-        dport = packet.tcp.srcport
-        cookie = None
-        key = '{}:{}_{}:{}'.format(srcip, sport, dstip, dport)
-        if key in self.cookie_dict:
-            cookie = self.cookie_dict[key]
         # RDP fields
         verMajor = verMinor = desktopWidth = desktopHeight = colorDepth = \
             sasSequence = keyboardLayout = clientBuild = clientName = \
@@ -528,7 +524,16 @@ class ProcessPackets:
             extEncMethods = channelDef_bin = channelCount = optInit = optEncRdp = \
             optEncSc = optEncCs = optPriHigh = optPriMed = optPriLow = optCompRdp \
             = optComp = optShowProto = optRmtCtrlPrs = clusterFlags_tmp = \
-            encryptionMethods_tmp = extEncMethods_tmp = ""
+            encryptionMethods_tmp = extEncMethods_tmp = cookie = req_protos = ""
+        key = '{}:{}_{}:{}'.format(
+            packet.ip.src,
+            packet.tcp.srcport,
+            packet.ip.dst,
+            packet.tcp.dstport)
+        if key in self.rdp_dict and "cookie" in self.rdp_dict[key]:
+            cookie = self.rdp_dict[key]["cookie"]
+        if key in self.rdp_dict and "req_protos" in self.rdp_dict[key]:
+            req_protos = self.rdp_dict[key]["req_protos"]
 
         # Client Core Data
         # https://msdn.microsoft.com/en-us/library/cc240510.aspx
@@ -641,6 +646,7 @@ class ProcessPackets:
                   "protocol": "rdp",
                   "rdp": {
                       "cookie": cookie,
+                      "requestedProtocols": req_protos,
                       "rdfp": rdfp,
                       "rdfpAlgorithms": rdfp_str,
                       "rdfpVersion": RDFP_VERSION,
@@ -828,7 +834,7 @@ def parse_cmd_args():
         choices=['tls', 'ssh', 'rdp', 'http', 'gquic'],
         help=helptxt)
     helptxt = "a dictionary of {decode_criterion_string: decode_as_protocol} \
-        that are used to tell tshark to decode protocols in situations it \
+        that is used to tell tshark to decode protocols in situations it \
         wouldn't usually."
     parser.add_argument(
         '-da', '--decode_as', type=json.loads, default=DECODE_AS, help=helptxt)
