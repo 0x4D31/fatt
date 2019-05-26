@@ -17,7 +17,7 @@ from hashlib import md5
 from collections import defaultdict
 
 __author__ = "Adel '0x4D31' Karimi"
-__version__ = "0.3"
+__version__ = "0.4"
 
 
 CAP_BPF_FILTER = (
@@ -39,7 +39,7 @@ DECODE_AS = {
      'tcp.port==989': 'tls', 'tcp.port==563': 'tls',
      'tcp.port==614': 'tls', 'tcp.port==636': 'tls'}
 HASSH_VERSION = '1.0'
-RDFP_VERSION = '0.1'
+RDFP_VERSION = '0.2'
 #PROTOCOLS = [
 #    'TLS', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL', 'GQUIC', 'QUIC']
 
@@ -195,7 +195,6 @@ class ProcessPackets:
                     self.rdp_dict[key]["req_protos"] = req_protos
                     # TLS/CredSSP (not standard RDP security protocols)
                     if req_protos != "0x00000000":
-
                         record = {
                             "timestamp": packet.sniff_time.isoformat(),
                             "sourceIp": packet.ip.src,
@@ -543,6 +542,7 @@ class ProcessPackets:
 
     def client_rdfp(self, packet):
         """returns ClientData message fields and RDFP (experimental fingerprint)
+        RDFP = md5(verMajor;verMinor;clusterFlags;encryptionMethods;extEncMethods;channelDef)
         """
         # RDP fields
         verMajor = verMinor = desktopWidth = desktopHeight = colorDepth = \
@@ -551,10 +551,8 @@ class ProcessPackets:
             = clientProductId = serialNumber = highColorDepth = \
             supportedColorDepths = earlyCapabilityFlags = clientDigProductId = \
             connectionType = pad1Octet = clusterFlags = encryptionMethods = \
-            extEncMethods = channelDef_bin = channelCount = optInit = optEncRdp = \
-            optEncSc = optEncCs = optPriHigh = optPriMed = optPriLow = optCompRdp \
-            = optComp = optShowProto = optRmtCtrlPrs = clusterFlags_tmp = \
-            encryptionMethods_tmp = extEncMethods_tmp = cookie = req_protos = ""
+            extEncMethods = channelCount = channelDef = cookie = req_protos = ""
+
         key = '{}:{}_{}:{}'.format(
             packet.ip.src,
             packet.tcp.srcport,
@@ -608,64 +606,44 @@ class ProcessPackets:
         if 'connectiontype' in packet.rdp.field_names:
             connectionType = packet.rdp.connectiontype
         if 'pad1octet' in packet.rdp.field_names:
-            pad1Octet = packet.rdp.pad1octet
+            pad1Octet = packet.rdp.pad1octet.raw_value
 
         # Client Cluster Data
         # https://msdn.microsoft.com/en-us/library/cc240514.aspx
         if 'clusterflags' in packet.rdp.field_names:
-            # BUG: .hex_value and .raw_value return wrong value
-            clusterFlags_tmp = packet.rdp.clusterflags
-            clusterFlags = int(clusterFlags_tmp, 16)
+            clusterFlags = packet.rdp.clusterflags.raw_value
 
         # Client Security Data
         # Only for "Standard RDP Security mechanisms"
         # https://msdn.microsoft.com/en-us/library/cc240511.aspx
         if 'encryptionmethods' in packet.rdp.field_names:
-            encryptionMethods_tmp = packet.rdp.encryptionmethods.raw_value
-            encryptionMethods = int(encryptionMethods_tmp, 16)
+            encryptionMethods = packet.rdp.encryptionmethods.raw_value
         # In French locale clients, encryptionMethods MUST be set to zero and
         # extEncryptionMethods MUST be set to the value to which encryptionMethods
         # would have been set.
         if 'extencryptionmethods' in packet.rdp.field_names:
-            extEncMethods_tmp = packet.rdp.extencryptionmethods.raw_value
-            extEncMethods = int(extEncMethods_tmp, 16)
+            extEncMethods = packet.rdp.extencryptionmethods.raw_value
 
         # Client Network Data
         # https://msdn.microsoft.com/en-us/library/cc240512.aspx
         if 'channelcount' in packet.rdp.field_names:
             channelCount = packet.rdp.channelcount
-        if 'options_initialized' in packet.rdp.field_names:
-            optInit = packet.rdp.options_initialized.base16_value
-        if 'options_encrypt_rdp' in packet.rdp.field_names:
-            optEncRdp = packet.rdp.options_encrypt_rdp.base16_value
-        if 'options_encrypt_sc' in packet.rdp.field_names:
-            optEncSc = packet.rdp.options_encrypt_sc.base16_value
-        if 'options_encrypt_cs' in packet.rdp.field_names:
-            optEncCs = packet.rdp.options_encrypt_cs.base16_value
-        if 'options_priority_high' in packet.rdp.field_names:
-            optPriHigh = packet.rdp.options_priority_high.base16_value
-        if 'options_priority_med' in packet.rdp.field_names:
-            optPriMed = packet.rdp.options_priority_med.base16_value
-        if 'options_priority_low' in packet.rdp.field_names:
-            optPriLow = packet.rdp.options_priority_low.base16_value
-        if 'options_compress_rdp' in packet.rdp.field_names:
-            optCompRdp = packet.rdp.options_compress_rdp.base16_value
-        if 'options_compress' in packet.rdp.field_names:
-            optComp = packet.rdp.options_compress.base16_value
-        if 'options_showprotocol' in packet.rdp.field_names:
-            optShowProto = packet.rdp.options_showprotocol.base16_value
-        if 'options_remotecontrolpersistent' in packet.rdp.field_names:
-            optRmtCtrlPrs = packet.rdp.options_remotecontrolpersistent.base16_value
-
-        channelDef_bin = ''.join(str(x) for x in [
-            optInit, optEncRdp, optEncSc, optEncCs, optPriHigh, optPriMed,
-            optPriLow, optCompRdp, optComp, optShowProto, optRmtCtrlPrs])
-        # channelDef_dec = int(channelDef_bin, 2)
+            channelDefArray = {}
+            channelDef_temp = []
+            for i in range(int(channelCount)):
+                name = packet.rdp.name.all_fields[i].show
+                options = packet.rdp.options.all_fields[i].raw_value
+                channelDefArray[i] = {
+                    "name": name,
+                    "options": options
+                }
+                channelDef_temp.append("{}:{}".format(name, options))
+            channelDef = ';'.join(channelDef_temp)
 
         # Create RDFP
         rdfp_str = ';'.join(str(x) for x in [
             verMajor, verMinor, clusterFlags, encryptionMethods, extEncMethods,
-            channelCount])
+            channelDef])
 
         rdfp = md5(rdfp_str.encode()).hexdigest()
         record = {
@@ -702,10 +680,10 @@ class ProcessPackets:
                 "clientDigProductId": clientDigProductId,
                 "connectionType": connectionType,
                 "pad1Octet": pad1Octet,
-                "clusterFlags": clusterFlags_tmp,
-                "encryptionMethods": encryptionMethods_tmp,
-                "extEncMethods": extEncMethods_tmp,
-                "channelDef": channelDef_bin
+                "clusterFlags": clusterFlags,
+                "encryptionMethods": encryptionMethods,
+                "extEncMethods": extEncMethods,
+                "channelDefArray": channelDefArray
             }
         }
         return record
