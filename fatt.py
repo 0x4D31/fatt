@@ -29,9 +29,8 @@ CAP_BPF_FILTER = (
     'udp port 443')
 DISPLAY_FILTER = (
     'tls.handshake.type == 1 || tls.handshake.type == 2 ||'
-    'ssh.message_code == 20 || ssh.protocol || rdp.rt_cookie ||'
-    'rdp.header.type == 0xc001 || gquic.tag == "CHLO" ||'
-    'http.request.method || data-text-lines'
+    'ssh.message_code == 20 || ssh.protocol || rdp ||'
+    'gquic.tag == "CHLO" || http.request.method || data-text-lines'
 )
 DECODE_AS = {
     'tcp.port==2222': 'ssh', 'tcp.port==3389': 'tpkt',
@@ -194,6 +193,33 @@ class ProcessPackets:
                 if 'negreq_requestedprotocols' in packet.rdp.field_names:
                     req_protos = packet.rdp.negreq_requestedprotocols
                     self.rdp_dict[key]["req_protos"] = req_protos
+                    # TLS/CredSSP (not standard RDP security protocols)
+                    if req_protos != "0x00000000":
+
+                        record = {
+                            "timestamp": packet.sniff_time.isoformat(),
+                            "sourceIp": packet.ip.src,
+                            "destinationIp": packet.ip.dst,
+                            "sourcePort": packet.tcp.srcport,
+                            "destinationPort": packet.tcp.dstport,
+                            "protocol": "rdp",
+                            "rdp": {
+                                "requestedProtocols": req_protos
+                            }
+                        }
+                        if self.pout:
+                            tmp = (
+                                '{sip}:{sp} -> {dip}:{dp} [RDP] req_protocols={proto}')
+                            tmp = tmp.format(
+                                sip=record['sourceIp'],
+                                sp=record['sourcePort'],
+                                dip=record['destinationIp'],
+                                dp=record['destinationPort'],
+                                proto=record['rdp']['requestedProtocols']
+                            )
+                            print(tmp)
+                        if self.jlog:
+                            self.logger.info(json.dumps(record))
             if 'clientdata' not in packet.rdp.field_names:
                 return
             if ("analysis_retransmission" in packet.tcp.field_names or
@@ -320,28 +346,29 @@ class ProcessPackets:
         # Create hassh
         hassh_str = ';'.join([ckex, ceacts, cmacts, ccacts])
         hassh = md5(hassh_str.encode()).hexdigest()
-        record = {"timestamp": packet.sniff_time.isoformat(),
-                  "sourceIp": packet.ip.src,
-                  "destinationIp": packet.ip.dst,
-                  "sourcePort": packet.tcp.srcport,
-                  "destinationPort": packet.tcp.dstport,
-                  "protocol": 'ssh',
-                  "ssh": {
-                      "client": protocol,
-                      "hassh": hassh,
-                      "hasshAlgorithms": hassh_str,
-                      "hasshVersion": HASSH_VERSION,
-                      "ckex": ckex,
-                      "ceacts": ceacts,
-                      "cmacts": cmacts,
-                      "ccacts": ccacts,
-                      "clcts": clcts,
-                      "clstc": clstc,
-                      "ceastc": ceastc,
-                      "cmastc": cmastc,
-                      "ccastc": ccastc,
-                      "cshka": cshka
-                  }
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": packet.ip.src,
+            "destinationIp": packet.ip.dst,
+            "sourcePort": packet.tcp.srcport,
+            "destinationPort": packet.tcp.dstport,
+            "protocol": 'ssh',
+            "ssh": {
+                "client": protocol,
+                "hassh": hassh,
+                "hasshAlgorithms": hassh_str,
+                "hasshVersion": HASSH_VERSION,
+                "ckex": ckex,
+                "ceacts": ceacts,
+                "cmacts": cmacts,
+                "ccacts": ccacts,
+                "clcts": clcts,
+                "clstc": clstc,
+                "ceastc": ceastc,
+                "cmastc": cmastc,
+                "ccastc": ccastc,
+                "cshka": cshka
+                }
         }
         return record
 
@@ -385,28 +412,29 @@ class ProcessPackets:
         # Create hasshServer
         hasshs_str = ';'.join([skex, seastc, smastc, scastc])
         hasshs = md5(hasshs_str.encode()).hexdigest()
-        record = {"timestamp": packet.sniff_time.isoformat(),
-                  "sourceIp": packet.ip.src,
-                  "destinationIp": packet.ip.dst,
-                  "sourcePort": packet.tcp.srcport,
-                  "destinationPort": packet.tcp.dstport,
-                  "protocol": 'ssh',
-                  "ssh": {
-                      "server": protocol,
-                      "hasshServer": hasshs,
-                      "hasshServerAlgorithms": hasshs_str,
-                      "hasshVersion": HASSH_VERSION,
-                      "skex": skex,
-                      "seastc": seastc,
-                      "smastc": smastc,
-                      "scastc": scastc,
-                      "slcts": slcts,
-                      "slstc": slstc,
-                      "seacts": seacts,
-                      "smacts": smacts,
-                      "scacts": scacts,
-                      "sshka": sshka
-                  }
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": packet.ip.src,
+            "destinationIp": packet.ip.dst,
+            "sourcePort": packet.tcp.srcport,
+            "destinationPort": packet.tcp.dstport,
+            "protocol": 'ssh',
+            "ssh": {
+                "server": protocol,
+                "hasshServer": hasshs,
+                "hasshServerAlgorithms": hasshs_str,
+                "hasshVersion": HASSH_VERSION,
+                "skex": skex,
+                "seastc": seastc,
+                "smastc": smastc,
+                "scastc": scastc,
+                "slcts": slcts,
+                "slstc": slstc,
+                "seacts": seacts,
+                "smacts": smacts,
+                "scacts": scacts,
+                "sshka": sshka
+                }
         }
         return record
 
@@ -449,22 +477,23 @@ class ProcessPackets:
         ja3_string = ','.join([
             tls_version, ciphers, extensions, elliptic_curve, ec_pointformat])
         ja3 = md5(ja3_string.encode()).hexdigest()
-        record = {"timestamp": packet.sniff_time.isoformat(),
-                  "sourceIp": packet.ip.src,
-                  "destinationIp": packet.ip.dst,
-                  "sourcePort": packet.tcp.srcport,
-                  "destinationPort": packet.tcp.dstport,
-                  "protocol": "tls",
-                  "tls": {
-                      "serverName": server_name,
-                      "ja3": ja3,
-                      "ja3Algorithms": ja3_string,
-                      "ja3Version": tls_version,
-                      "ja3Ciphers": ciphers,
-                      "ja3Extensions": extensions,
-                      "ja3Ec": elliptic_curve,
-                      "ja3EcFmt": ec_pointformat
-                  }
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": packet.ip.src,
+            "destinationIp": packet.ip.dst,
+            "sourcePort": packet.tcp.srcport,
+            "destinationPort": packet.tcp.dstport,
+            "protocol": "tls",
+            "tls": {
+                "serverName": server_name,
+                "ja3": ja3,
+                "ja3Algorithms": ja3_string,
+                "ja3Version": tls_version,
+                "ja3Ciphers": ciphers,
+                "ja3Extensions": extensions,
+                "ja3Ec": elliptic_curve,
+                "ja3EcFmt": ec_pointformat
+                }
         }
         return record
 
@@ -494,19 +523,20 @@ class ProcessPackets:
         ja3s_string = ','.join([
             tls_version, ciphers, extensions])
         ja3s = md5(ja3s_string.encode()).hexdigest()
-        record = {"timestamp": packet.sniff_time.isoformat(),
-                  "sourceIp": packet.ip.src,
-                  "destinationIp": packet.ip.dst,
-                  "sourcePort": packet.tcp.srcport,
-                  "destinationPort": packet.tcp.dstport,
-                  "protocol": "tls",
-                  "tls": {
-                      "ja3s": ja3s,
-                      "ja3sAlgorithms": ja3s_string,
-                      "ja3sVersion": tls_version,
-                      "ja3sCiphers": ciphers,
-                      "ja3sExtensions": extensions
-                  }
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": packet.ip.src,
+            "destinationIp": packet.ip.dst,
+            "sourcePort": packet.tcp.srcport,
+            "destinationPort": packet.tcp.dstport,
+            "protocol": "tls",
+            "tls": {
+                "ja3s": ja3s,
+                "ja3sAlgorithms": ja3s_string,
+                "ja3sVersion": tls_version,
+                "ja3sCiphers": ciphers,
+                "ja3sExtensions": extensions
+            }
         }
         return record
 
@@ -638,44 +668,45 @@ class ProcessPackets:
             channelCount])
 
         rdfp = md5(rdfp_str.encode()).hexdigest()
-        record = {"timestamp": packet.sniff_time.isoformat(),
-                  "sourceIp": packet.ip.src,
-                  "destinationIp": packet.ip.dst,
-                  "sourcePort": packet.tcp.srcport,
-                  "destinationPort": packet.tcp.dstport,
-                  "protocol": "rdp",
-                  "rdp": {
-                      "cookie": cookie,
-                      "requestedProtocols": req_protos,
-                      "rdfp": rdfp,
-                      "rdfpAlgorithms": rdfp_str,
-                      "rdfpVersion": RDFP_VERSION,
-                      "verMajor": verMajor,
-                      "verMinor": verMinor,
-                      "desktopWidth": desktopWidth,
-                      "desktopHeight": desktopHeight,
-                      "colorDepth": colorDepth,
-                      "sasSequence": sasSequence,
-                      "keyboardLayout": keyboardLayout,
-                      "clientBuild": clientBuild,
-                      "clientName": clientName,
-                      "keyboardSubtype": keyboardSubtype,
-                      "keyboardType": keyboardType,
-                      "keyboardFuncKey": keyboardFuncKey,
-                      "postbeta2ColorDepth": postbeta2ColorDepth,
-                      "clientProductId": clientProductId,
-                      "serialNumber": serialNumber,
-                      "highColorDepth": highColorDepth,
-                      "supportedColorDepths": supportedColorDepths,
-                      "earlyCapabilityFlags": earlyCapabilityFlags,
-                      "clientDigProductId": clientDigProductId,
-                      "connectionType": connectionType,
-                      "pad1Octet": pad1Octet,
-                      "clusterFlags": clusterFlags_tmp,
-                      "encryptionMethods": encryptionMethods_tmp,
-                      "extEncMethods": extEncMethods_tmp,
-                      "channelDef": channelDef_bin
-                  }
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": packet.ip.src,
+            "destinationIp": packet.ip.dst,
+            "sourcePort": packet.tcp.srcport,
+            "destinationPort": packet.tcp.dstport,
+            "protocol": "rdp",
+            "rdp": {
+                "cookie": cookie,
+                "requestedProtocols": req_protos,
+                "rdfp": rdfp,
+                "rdfpAlgorithms": rdfp_str,
+                "rdfpVersion": RDFP_VERSION,
+                "verMajor": verMajor,
+                "verMinor": verMinor,
+                "desktopWidth": desktopWidth,
+                "desktopHeight": desktopHeight,
+                "colorDepth": colorDepth,
+                "sasSequence": sasSequence,
+                "keyboardLayout": keyboardLayout,
+                "clientBuild": clientBuild,
+                "clientName": clientName,
+                "keyboardSubtype": keyboardSubtype,
+                "keyboardType": keyboardType,
+                "keyboardFuncKey": keyboardFuncKey,
+                "postbeta2ColorDepth": postbeta2ColorDepth,
+                "clientProductId": clientProductId,
+                "serialNumber": serialNumber,
+                "highColorDepth": highColorDepth,
+                "supportedColorDepths": supportedColorDepths,
+                "earlyCapabilityFlags": earlyCapabilityFlags,
+                "clientDigProductId": clientDigProductId,
+                "connectionType": connectionType,
+                "pad1Octet": pad1Octet,
+                "clusterFlags": clusterFlags_tmp,
+                "encryptionMethods": encryptionMethods_tmp,
+                "extEncMethods": extEncMethods_tmp,
+                "channelDef": channelDef_bin
+            }
         }
         return record
 
@@ -693,17 +724,18 @@ class ProcessPackets:
             ua = packet.http.user_agent
         client_header_ordering = ','.join(req_headers)
         client_header_hash = md5(client_header_ordering.encode('utf-8')).hexdigest()
-        record = {"timestamp": packet.sniff_time.isoformat(),
-                  "sourceIp": packet.ip.src,
-                  "destinationIp": packet.ip.dst,
-                  "sourcePort": packet.tcp.srcport,
-                  "destinationPort": packet.tcp.dstport,
-                  "protocol": "http",
-                  "http": {
-                      "userAgent": ua,
-                      "clientHeaderOrder": client_header_ordering,
-                      "clientHeaderHash": client_header_hash
-                  }
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": packet.ip.src,
+            "destinationIp": packet.ip.dst,
+            "sourcePort": packet.tcp.srcport,
+            "destinationPort": packet.tcp.dstport,
+            "protocol": "http",
+            "http": {
+                "userAgent": ua,
+                "clientHeaderOrder": client_header_ordering,
+                "clientHeaderHash": client_header_hash
+            }
         }
         return record
 
@@ -721,17 +753,18 @@ class ProcessPackets:
         server_header_ordering = ','.join(resp_headers)
         server_header_hash = md5(
             server_header_ordering.encode('utf-8')).hexdigest()
-        record = {"timestamp": packet.sniff_time.isoformat(),
-                  "sourceIp": packet.ip.src,
-                  "destinationIp": packet.ip.dst,
-                  "sourcePort": packet.tcp.srcport,
-                  "destinationPort": packet.tcp.dstport,
-                  "protocol": "http",
-                  "http": {
-                      "server": packet.http.server,
-                      "serverHeaderOrder": server_header_ordering,
-                      "serverHeaderHash": server_header_hash
-                  }
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": packet.ip.src,
+            "destinationIp": packet.ip.dst,
+            "sourcePort": packet.tcp.srcport,
+            "destinationPort": packet.tcp.dstport,
+            "protocol": "http",
+            "http": {
+                "server": packet.http.server,
+                "serverHeaderOrder": server_header_ordering,
+                "serverHeaderHash": server_header_hash
+            }
         }
         return record
 
@@ -770,32 +803,33 @@ class ProcessPackets:
             copt= packet.gquic.tag_copt
         if 'tag_ccrt' in packet.gquic.field_names:
             ccrt = packet.gquic.tag_ccrt.raw_value
-        record = {"timestamp": packet.sniff_time.isoformat(),
-                  "sourceIp": packet.ip.src,
-                  "destinationIp": packet.ip.dst,
-                  "sourcePort": packet.udp.srcport,
-                  "destinationPort": packet.udp.dstport,
-                  "protocol": "gquic",
-                  "gquic": {
-                      "tagNumber": packet.gquic.tag_number,
-                      "sni": sni,
-                      "uaid": uaid,
-                      "ver": ver,
-                      "aead": aead,
-                      "smhl": smhl,
-                      "mids": mids,
-                      "kexs": kexs,
-                      "xlct": xlct,
-                      "copt": copt,
-                      "ccrt": ccrt,
-                      # you can uncomment the following fields
-                      # TODO: cfcw, sfcw, irtt, csct, sclc, pubs, icsl, smhl, tcid, scid?!
-                      "stk": stk,
-                      "pdmd": pdmd,
-                      "ccs": ccs,
-                      "ccrt": ccrt,
-                      "scid": scid
-                  }
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": packet.ip.src,
+            "destinationIp": packet.ip.dst,
+            "sourcePort": packet.udp.srcport,
+            "destinationPort": packet.udp.dstport,
+            "protocol": "gquic",
+            "gquic": {
+                "tagNumber": packet.gquic.tag_number,
+                "sni": sni,
+                "uaid": uaid,
+                "ver": ver,
+                "aead": aead,
+                "smhl": smhl,
+                "mids": mids,
+                "kexs": kexs,
+                "xlct": xlct,
+                "copt": copt,
+                "ccrt": ccrt,
+                # you can uncomment the following fields
+                # TODO: cfcw, sfcw, irtt, csct, sclc, pubs, icsl, smhl, tcid, scid?!
+                "stk": stk,
+                "pdmd": pdmd,
+                "ccs": ccs,
+                "ccrt": ccrt,
+                "scid": scid
+            }
         }
         return record
 
