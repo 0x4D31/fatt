@@ -697,9 +697,17 @@ class ProcessPackets:
                   'request_full_uri',
                   'request', 'request_number', 'prev_request_in']
         req_headers = [i for i in packet.http.field_names if i not in REQ_WL]
-        ua = None
-        if 'user_agent' in req_headers:
+        ua = requestURI = None
+        if 'user_agent' in packet.http.field_names:
             ua = packet.http.user_agent
+        if 'request_uri' in packet.http.field_names:
+            requestURI = packet.http.request_uri
+        if 'request_full_uri' in packet.http.field_names:
+            requestFullURI = packet.http.request_full_uri
+        if 'request_version' in packet.http.field_names:
+            requestVersion = packet.http.request_version
+        if 'request_method' in packet.http.field_names:
+            requestMethod = packet.http.request_method
         client_header_ordering = ','.join(req_headers)
         client_header_hash = md5(client_header_ordering.encode('utf-8')).hexdigest()
         record = {
@@ -710,6 +718,10 @@ class ProcessPackets:
             "destinationPort": packet.tcp.dstport,
             "protocol": "http",
             "http": {
+                "requestURI": requestURI,
+                "requestFullURI": requestFullURI,
+                "requestVersion": requestVersion,
+                "requestMethod": requestMethod,
                 "userAgent": ua,
                 "clientHeaderOrder": client_header_ordering,
                 "clientHeaderHash": client_header_hash
