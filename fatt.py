@@ -310,12 +310,12 @@ class ProcessPackets:
         """returns HASSH (i.e. SSH Client Fingerprint)
         HASSH = md5(KEX;EACTS;MACTS;CACTS)
         """
-        srcip = packet.ip.src
-        dstip = packet.ip.dst
-        sport = packet.tcp.srcport
-        dport = packet.tcp.srcport
         protocol = None
-        key = '{}:{}_{}:{}'.format(srcip, sport, dstip, dport)
+        key = '{}:{}_{}:{}'.format(
+            packet.ip.src,
+            packet.tcp.srcport,
+            packet.ip.dst,
+            packet.tcp.dstport)
         if key in self.protocol_dict:
             protocol = self.protocol_dict[key]
         # hassh fields
@@ -376,12 +376,12 @@ class ProcessPackets:
         """returns HASSHServer (i.e. SSH Server Fingerprint)
         HASSHServer = md5(KEX;EASTC;MASTC;CASTC)
         """
-        srcip = packet.ip.src
-        dstip = packet.ip.dst
-        sport = packet.tcp.srcport
-        dport = packet.tcp.srcport
         protocol = None
-        key = '{}:{}_{}:{}'.format(srcip, sport, dstip, dport)
+        key = '{}:{}_{}:{}'.format(
+            packet.ip.src,
+            packet.tcp.srcport,
+            packet.ip.dst,
+            packet.tcp.dstport)
         if key in self.protocol_dict:
             protocol = self.protocol_dict[key]
         # hasshServer fields
