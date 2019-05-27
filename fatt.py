@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# Copyright (c) 2018, Adel "0x4d31" Karimi.
+# Copyright (c) 2019, Adel "0x4d31" Karimi.
 # All rights reserved.
 # Licensed under the BSD 3-Clause license.
 # For full license text, see the LICENSE file in the repo root
 # or https://opensource.org/licenses/BSD-3-Clause
 
-# FATT - Fingerprint All The Things
-# Supported protocols: SSL/TLS, SSH, RDP, HTTP, gQUIC, IETF QUIC
+# fatt. Fingerprint All The Things
+# Supported protocols: SSL/TLS, SSH, RDP, HTTP, gQUIC
 
 import argparse
 import pyshark
@@ -40,9 +40,6 @@ DECODE_AS = {
      'tcp.port==614': 'tls', 'tcp.port==636': 'tls'}
 HASSH_VERSION = '1.0'
 RDFP_VERSION = '0.2'
-#PROTOCOLS = [
-#    'TLS', 'SSH', 'RDP', 'HTTP', 'DATA-TEXT-LINES', 'MYSQL', 'GQUIC', 'QUIC']
-
 
 class ProcessPackets:
 
@@ -58,11 +55,9 @@ class ProcessPackets:
     def process(self, packet):
         record = None
         proto = packet.highest_layer
-        # if proto not in PROTOCOLS:
-        #    return
 
         # Clear the dictionary used for extracting ssh protocol strings
-        # and rdp cookies
+        # and rdp cookies/negotiateRequests
         if len(self.protocol_dict) > 100 and proto != 'SSH':
             self.protocol_dict.clear()
         if len(self.rdp_dict) > 100 and proto != 'RDP':
@@ -895,7 +890,6 @@ def main():
     """intake arguments from the user and extract RDP client fingerprints."""
     args = parse_cmd_args()
     setup_logging(args.output_file)
-
     fingerprint = args.fingerprint
     jlog = args.json_logging
     pout = args.print_output
@@ -950,12 +944,6 @@ def main():
             output_file=args.write_pcap)
         try:
             cap.apply_on_packets(pp.process)
-            # for packet in cap.sniff_continuously(packet_count=0):
-            # process_packet(
-            #     packet,
-            #     jlog=args.json_logging,
-            #     fingerprint=args.fingerprint,
-            #     pout=args.print_output)
         except (KeyboardInterrupt, SystemExit):
             print("Exiting..\nBYE o/\n")
 
