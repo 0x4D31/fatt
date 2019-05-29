@@ -621,9 +621,9 @@ class ProcessPackets:
 
         # Client Network Data
         # https://msdn.microsoft.com/en-us/library/cc240512.aspx
+        channelDefArray = {}
         if 'channelcount' in packet.rdp.field_names:
             channelCount = packet.rdp.channelcount
-            channelDefArray = {}
             channelDef_temp = []
             for i in range(int(channelCount)):
                 name = packet.rdp.name.all_fields[i].show
@@ -692,7 +692,7 @@ class ProcessPackets:
                   'request_full_uri',
                   'request', 'request_number', 'prev_request_in']
         req_headers = [i for i in packet.http.field_names if i not in REQ_WL]
-        ua = requestURI = None
+        ua = requestURI = requestFullURI = requestVersion = requestMethod = None
         if 'user_agent' in packet.http.field_names:
             ua = packet.http.user_agent
         if 'request_uri' in packet.http.field_names:
