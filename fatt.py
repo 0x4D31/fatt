@@ -41,6 +41,7 @@ DECODE_AS = {
 HASSH_VERSION = '1.0'
 RDFP_VERSION = '0.2'
 
+
 class ProcessPackets:
 
     def __init__(self, fingerprint, jlog, pout):
@@ -50,7 +51,6 @@ class ProcessPackets:
         self.pout = pout
         self.protocol_dict = {}
         self.rdp_dict = defaultdict(dict)
-
 
     def process(self, packet):
         record = None
@@ -362,10 +362,9 @@ class ProcessPackets:
                 "cmastc": cmastc,
                 "ccastc": ccastc,
                 "cshka": cshka
-                }
+            }
         }
         return record
-
 
     def server_hassh(self, packet):
         """returns HASSHServer (i.e. SSH Server Fingerprint)
@@ -428,10 +427,9 @@ class ProcessPackets:
                 "smacts": smacts,
                 "scacts": scacts,
                 "sshka": sshka
-                }
+            }
         }
         return record
-
 
     def client_ja3(self, packet):
         # GREASE_TABLE Ref: https://tools.ietf.org/html/draft-davidben-tls-grease-00
@@ -439,7 +437,7 @@ class ProcessPackets:
                         '27242', '31354', '35466', '39578', '43690', '47802',
                         '51914', '56026', '60138', '64250']
         # ja3 fields
-        tls_version = ciphers = extensions = elliptic_curve = ec_pointformat = ''
+        tls_version = ciphers = extensions = elliptic_curve = ec_pointformat = ""
         if 'handshake_version' in packet.tls.field_names:
             tls_version = int(packet.tls.handshake_version, 16)
             tls_version = str(tls_version)
@@ -464,7 +462,7 @@ class ProcessPackets:
                          if ecpf.show not in GREASE_TABLE]
             ec_pointformat = '-'.join(ecpf_list)
         # TODO: log other non-ja3 fields
-        server_name = None
+        server_name = ""
         if 'handshake_extensions_server_name' in packet.tls.field_names:
             server_name = packet.tls.handshake_extensions_server_name
         # Create ja3
@@ -487,10 +485,9 @@ class ProcessPackets:
                 "ja3Extensions": extensions,
                 "ja3Ec": elliptic_curve,
                 "ja3EcFmt": ec_pointformat
-                }
+            }
         }
         return record
-
 
     def server_ja3(self, packet):
         # GREASE_TABLE Ref: https://tools.ietf.org/html/draft-davidben-tls-grease-00
@@ -498,7 +495,7 @@ class ProcessPackets:
                         '27242', '31354', '35466', '39578', '43690', '47802',
                         '51914', '56026', '60138', '64250']
         # ja3s fields
-        tls_version = ciphers = extensions = ''
+        tls_version = ciphers = extensions = ""
         if 'handshake_version' in packet.tls.field_names:
             tls_version = int(packet.tls.handshake_version, 16)
             tls_version = str(tls_version)
@@ -533,7 +530,6 @@ class ProcessPackets:
             }
         }
         return record
-
 
     def client_rdfp(self, packet):
         """returns ClientData message fields and RDFP (experimental fingerprint)
@@ -683,7 +679,6 @@ class ProcessPackets:
         }
         return record
 
-
     def client_http(self, packet):
         # TODO: log full http req header
         REQ_WL = ['', '_ws_expert', 'chat', '_ws_expert_message',
@@ -692,7 +687,7 @@ class ProcessPackets:
                   'request_full_uri',
                   'request', 'request_number', 'prev_request_in']
         req_headers = [i for i in packet.http.field_names if i not in REQ_WL]
-        ua = requestURI = requestFullURI = requestVersion = requestMethod = None
+        ua = requestURI = requestFullURI = requestVersion = requestMethod = ""
         if 'user_agent' in packet.http.field_names:
             ua = packet.http.user_agent
         if 'request_uri' in packet.http.field_names:
@@ -722,8 +717,8 @@ class ProcessPackets:
                 "clientHeaderHash": client_header_hash
             }
         }
+        print(packet.http.field_names)
         return record
-
 
     def server_http(self, packet):
         # TODO: log full http resp header
@@ -738,6 +733,15 @@ class ProcessPackets:
         server_header_ordering = ','.join(resp_headers)
         server_header_hash = md5(
             server_header_ordering.encode('utf-8')).hexdigest()
+        server = ""
+        if 'server' in packet.http.field_names:
+            server = packet.http.server
+        if 'response_version' in packet.http.field_names:
+            responseVersion = packet.http.response_version
+        if 'response_code' in packet.http.field_names:
+            responseCode = packet.http.response_code
+        if 'content_length' in packet.http.field_names:
+            contentLength = packet.http.content_length
         record = {
             "timestamp": packet.sniff_time.isoformat(),
             "sourceIp": packet.ip.src,
@@ -746,17 +750,19 @@ class ProcessPackets:
             "destinationPort": packet.tcp.dstport,
             "protocol": "http",
             "http": {
-                "server": packet.http.server,
+                "server": server,
+                "responseVersion": responseVersion,
+                "responseCode": responseCode,
+                "contentLength": contentLength,
                 "serverHeaderOrder": server_header_ordering,
                 "serverHeaderHash": server_header_hash
             }
         }
         return record
 
-
     def client_gquic(self, packet):
         # https://tools.ietf.org/html/draft-ietf-quic-transport-20
-        sni = uaid = ver = stk = pdmd = ccs = ccrt = aead = scid= smhl = mids \
+        sni = uaid = ver = stk = pdmd = ccs = ccrt = aead = scid = smhl = mids \
             = kexs = xlct = copt = ccrt = None
         if 'tag_sni' in packet.gquic.field_names:
             sni = packet.gquic.tag_sni
@@ -785,7 +791,7 @@ class ProcessPackets:
         if 'tag_xlct' in packet.gquic.field_names:
             xlct = packet.gquic.tag_xlct.raw_value
         if 'tag_copt' in packet.gquic.field_names:
-            copt= packet.gquic.tag_copt
+            copt = packet.gquic.tag_copt
         if 'tag_ccrt' in packet.gquic.field_names:
             ccrt = packet.gquic.tag_ccrt.raw_value
         record = {
@@ -899,10 +905,10 @@ def main():
     # Process PCAP file
     if args.read_file:
         cap = pyshark.FileCapture(
-        args.read_file,
-        display_filter=DISPLAY_FILTER,
-        keep_packets=False,
-        decode_as=args.decode_as)
+            args.read_file,
+            display_filter=DISPLAY_FILTER,
+            keep_packets=False,
+            decode_as=args.decode_as)
         try:
             for packet in cap:
                 pp.process(packet)
@@ -914,9 +920,9 @@ def main():
     # Process directory of PCAP files
     elif args.read_directory:
         files = [f.path for f in os.scandir(args.read_directory)
-                 if not f.name.startswith('.') and not f.is_dir()
-                 and (f.name.endswith(".pcap") or f.name.endswith(".pcapng")
-                 or f.name.endswith(".cap"))]
+                 if not f.name.startswith('.') and not f.is_dir() and
+                 (f.name.endswith(".pcap") or f.name.endswith(".pcapng") or
+                 f.name.endswith(".cap"))]
         for file in files:
             cap = pyshark.FileCapture(
                 file,
