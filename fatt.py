@@ -717,7 +717,6 @@ class ProcessPackets:
                 "clientHeaderHash": client_header_hash
             }
         }
-        print(packet.http.field_names)
         return record
 
     def server_http(self, packet):
@@ -733,7 +732,7 @@ class ProcessPackets:
         server_header_ordering = ','.join(resp_headers)
         server_header_hash = md5(
             server_header_ordering.encode('utf-8')).hexdigest()
-        server = ""
+        server = responseVersion = responseCode = contentLength = ""
         if 'server' in packet.http.field_names:
             server = packet.http.server
         if 'response_version' in packet.http.field_names:
