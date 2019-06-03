@@ -230,5 +230,4 @@ $ cat fatt.log
 
 ## TODO:
 
-- [ ] Clean up the code!
-- [ ] Finalize the composition of RDFP, remove channelDef
+- https://github.com/0x4D31/fatt/wiki/TODO
