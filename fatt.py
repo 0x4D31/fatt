@@ -30,16 +30,16 @@ CAP_BPF_FILTER = (
     'tcp port 3306 or tcp port 80 or udp port 80 or '
     'udp port 443')
 DISPLAY_FILTER = (
-    'tls.handshake.type == 1 || tls.handshake.type == 2 ||'
+    'ssl.handshake.type == 1 || ssl.handshake.type == 2 ||'
     'ssh.message_code == 20 || ssh.protocol || rdp ||'
     'gquic.tag == "CHLO" || http.request.method || data-text-lines'
 )
 DECODE_AS = {
     'tcp.port==2222': 'ssh', 'tcp.port==3389': 'tpkt',
-     'tcp.port==993': 'tls', 'tcp.port==995': 'tls',
-     'tcp.port==990': 'tls', 'tcp.port==992': 'tls',
-     'tcp.port==989': 'tls', 'tcp.port==563': 'tls',
-     'tcp.port==614': 'tls', 'tcp.port==636': 'tls'}
+     'tcp.port==993': 'ssl', 'tcp.port==995': 'ssl',
+     'tcp.port==990': 'ssl', 'tcp.port==992': 'ssl',
+     'tcp.port==989': 'ssl', 'tcp.port==563': 'ssl',
+     'tcp.port==614': 'ssl', 'tcp.port==636': 'ssl'}
 HASSH_VERSION = '1.0'
 RDFP_VERSION = '0.2'
 
@@ -123,17 +123,17 @@ class ProcessPackets:
 
         # [ TLS ]
         # TODO: extract tls certificates
-        elif proto == 'TLS' and ('tls' in self.fingerprint or
+        elif proto == 'SSL' and ('ssl' in self.fingerprint or
                                  self.fingerprint == 'all'):
-            if 'record_content_type' not in packet.tls.field_names:
+            if 'record_content_type' not in packet.ssl.field_names:
                 return
             # Content Type: Handshake (22)
-            if packet.tls.record_content_type != '22':
+            if packet.ssl.record_content_type != '22':
                 return
             # Handshake Type: Client Hello (1) / Server Hello (2)
-            if 'handshake_type' not in packet.tls.field_names:
+            if 'handshake_type' not in packet.ssl.field_names:
                 return
-            htype = packet.tls.handshake_type
+            htype = packet.ssl.handshake_type
             if not (htype == '1' or htype == '2'):
                 return
             # log the anomalous / retransmission packets
@@ -440,33 +440,33 @@ class ProcessPackets:
                         '51914', '56026', '60138', '64250']
         # ja3 fields
         tls_version = ciphers = extensions = elliptic_curve = ec_pointformat = ""
-        if 'handshake_version' in packet.tls.field_names:
-            tls_version = int(packet.tls.handshake_version, 16)
+        if 'handshake_version' in packet.ssl.field_names:
+            tls_version = int(packet.ssl.handshake_version, 16)
             tls_version = str(tls_version)
-        if 'handshake_ciphersuite' in packet.tls.field_names:
+        if 'handshake_ciphersuite' in packet.ssl.field_names:
             cipher_list = [
-                c.show for c in packet.tls.handshake_ciphersuite.fields
+                c.show for c in packet.ssl.handshake_ciphersuite.fields
                 if c.show not in GREASE_TABLE]
             ciphers = '-'.join(cipher_list)
-        if 'handshake_extension_type' in packet.tls.field_names:
+        if 'handshake_extension_type' in packet.ssl.field_names:
             extension_list = [
-                e.show for e in packet.tls.handshake_extension_type.fields
+                e.show for e in packet.ssl.handshake_extension_type.fields
                 if e.show not in GREASE_TABLE]
             extensions = '-'.join(extension_list)
-        if 'handshake_extensions_supported_group' in packet.tls.field_names:
+        if 'handshake_extensions_supported_group' in packet.ssl.field_names:
             ec_list = [str(int(ec.show, 16)) for ec in
-                       packet.tls.handshake_extensions_supported_group.fields
+                       packet.ssl.handshake_extensions_supported_group.fields
                        if str(int(ec.show, 16)) not in GREASE_TABLE]
             elliptic_curve = '-'.join(ec_list)
-        if 'handshake_extensions_ec_point_format' in packet.tls.field_names:
+        if 'handshake_extensions_ec_point_format' in packet.ssl.field_names:
             ecpf_list = [ecpf.show for ecpf in
-                         packet.tls.handshake_extensions_ec_point_format.fields
+                         packet.ssl.handshake_extensions_ec_point_format.fields
                          if ecpf.show not in GREASE_TABLE]
             ec_pointformat = '-'.join(ecpf_list)
         # TODO: log other non-ja3 fields
         server_name = ""
-        if 'handshake_extensions_server_name' in packet.tls.field_names:
-            server_name = packet.tls.handshake_extensions_server_name
+        if 'handshake_extensions_server_name' in packet.ssl.field_names:
+            server_name = packet.ssl.handshake_extensions_server_name
         # Create ja3
         ja3_string = ','.join([
             tls_version, ciphers, extensions, elliptic_curve, ec_pointformat])
@@ -498,17 +498,17 @@ class ProcessPackets:
                         '51914', '56026', '60138', '64250']
         # ja3s fields
         tls_version = ciphers = extensions = ""
-        if 'handshake_version' in packet.tls.field_names:
-            tls_version = int(packet.tls.handshake_version, 16)
+        if 'handshake_version' in packet.ssl.field_names:
+            tls_version = int(packet.ssl.handshake_version, 16)
             tls_version = str(tls_version)
-        if 'handshake_ciphersuite' in packet.tls.field_names:
+        if 'handshake_ciphersuite' in packet.ssl.field_names:
             cipher_list = [
-                c.show for c in packet.tls.handshake_ciphersuite.fields
+                c.show for c in packet.ssl.handshake_ciphersuite.fields
                 if c.show not in GREASE_TABLE]
             ciphers = '-'.join(cipher_list)
-        if 'handshake_extension_type' in packet.tls.field_names:
+        if 'handshake_extension_type' in packet.ssl.field_names:
             extension_list = [
-                e.show for e in packet.tls.handshake_extension_type.fields
+                e.show for e in packet.ssl.handshake_extension_type.fields
                 if e.show not in GREASE_TABLE]
             extensions = '-'.join(extension_list)
         # TODO: log other non-ja3s fields
