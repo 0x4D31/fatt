@@ -893,6 +893,7 @@ def setup_logging(logfile):
 
 def main():
     """intake arguments from the user and extract RDP client fingerprints."""
+    global DISPLAY_FILTER
     args = parse_cmd_args()
     setup_logging(args.output_file)
     fingerprint = args.fingerprint
@@ -939,6 +940,8 @@ def main():
 
     # Capture live network traffic
     elif args.interface:
+        if args.write_pcap:
+            DISPLAY_FILTER = None
         # TODO: Use a Ring Buffer (LiveRingCapture), when the issue is fixed:
         # https://github.com/KimiNewt/pyshark/issues/299
         cap = pyshark.LiveCapture(
