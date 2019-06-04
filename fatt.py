@@ -7,6 +7,8 @@
 
 # fatt. Fingerprint All The Things
 # Supported protocols: SSL/TLS, SSH, RDP, HTTP, gQUIC
+#
+# This version works with the old tshark versions (< 2.9.0) that use 'ssl' instead of 'tls'!
 
 import argparse
 import pyshark
