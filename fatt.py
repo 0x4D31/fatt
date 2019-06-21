@@ -15,11 +15,12 @@ import pyshark
 import os
 import json
 import logging
+import struct
 from hashlib import md5
 from collections import defaultdict
 
 __author__ = "Adel '0x4D31' Karimi"
-__version__ = "0.4"
+__version__ = "1.0"
 
 
 CAP_BPF_FILTER = (
@@ -41,7 +42,7 @@ DECODE_AS = {
      'tcp.port==989': 'ssl', 'tcp.port==563': 'ssl',
      'tcp.port==614': 'ssl', 'tcp.port==636': 'ssl'}
 HASSH_VERSION = '1.0'
-RDFP_VERSION = '0.2'
+RDFP_VERSION = '0.3'
 
 
 class ProcessPackets:
@@ -535,7 +536,7 @@ class ProcessPackets:
 
     def client_rdfp(self, packet):
         """returns ClientData message fields and RDFP (experimental fingerprint)
-        RDFP = md5(verMajor;verMinor;clusterFlags;encryptionMethods;extEncMethods;channelDef)
+        RDFP = md5(verMajor,verMinor,clusterFlags,encryptionMethods,extEncMethods,channelDef)
         """
         # RDP fields
         verMajor = verMinor = desktopWidth = desktopHeight = colorDepth = \
@@ -604,18 +605,27 @@ class ProcessPackets:
         # Client Cluster Data
         # https://msdn.microsoft.com/en-us/library/cc240514.aspx
         if 'clusterflags' in packet.rdp.field_names:
-            clusterFlags = packet.rdp.clusterflags.raw_value
+            clusterFlags_raw = packet.rdp.clusterflags.raw_value
+            # convert to little-endian
+            clusterFlags = struct.pack('<L', int(clusterFlags_raw, base=16))
+            clusterFlags = clusterFlags.hex()
 
         # Client Security Data
         # Only for "Standard RDP Security mechanisms"
         # https://msdn.microsoft.com/en-us/library/cc240511.aspx
         if 'encryptionmethods' in packet.rdp.field_names:
-            encryptionMethods = packet.rdp.encryptionmethods.raw_value
+            encryptionMethods_raw = packet.rdp.encryptionmethods.raw_value
+            # convert to little-endian
+            encryptionMethods = struct.pack('<L', int(encryptionMethods_raw, base=16))
+            encryptionMethods = encryptionMethods.hex()
         # In French locale clients, encryptionMethods MUST be set to zero and
         # extEncryptionMethods MUST be set to the value to which encryptionMethods
         # would have been set.
         if 'extencryptionmethods' in packet.rdp.field_names:
-            extEncMethods = packet.rdp.extencryptionmethods.raw_value
+            extEncMethods_raw = packet.rdp.extencryptionmethods.raw_value
+            # convert to little-endian
+            extEncMethods = struct.pack('<L', int(extEncMethods_raw, base=16))
+            extEncMethods = extEncMethods.hex()
 
         # Client Network Data
         # https://msdn.microsoft.com/en-us/library/cc240512.aspx
@@ -625,16 +635,20 @@ class ProcessPackets:
             channelDef_temp = []
             for i in range(int(channelCount)):
                 name = packet.rdp.name.all_fields[i].show
-                options = packet.rdp.options.all_fields[i].raw_value
+                options_raw = packet.rdp.options.all_fields[i].raw_value
+                # convert to little-endian
+                options = struct.pack('<L', int(options_raw, base=16))
+                options = options.hex()
+
                 channelDefArray[i] = {
                     "name": name,
                     "options": options
                 }
                 channelDef_temp.append("{}:{}".format(name, options))
-            channelDef = ';'.join(channelDef_temp)
+            channelDef = '-'.join(channelDef_temp)
 
         # Create RDFP
-        rdfp_str = ';'.join(str(x) for x in [
+        rdfp_str = ','.join(str(x) for x in [
             verMajor, verMinor, clusterFlags, encryptionMethods, extEncMethods,
             channelDef])
 
