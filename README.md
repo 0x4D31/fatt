@@ -32,6 +32,8 @@ Other than that, I'm working on a go based version of fatt which is faster, and 
 
 You need to first install [tshark](https://github.com/wireshark/wireshark). Make sure you have the version v2.9.0 or later. Tshark/Wireshak renamed 'ssl' to 'tls' from version v2.9.0, and fatt is written based on the new version of tshark.
 
+If you have an old version of tshark (< v2.9.0), you can use the fatt script from ["old-tshark" branch](https://github.com/0x4D31/fatt/tree/old-tshark).
+
 2. Install dependencies
 
 ```buildoutcfg
