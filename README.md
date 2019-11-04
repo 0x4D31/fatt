@@ -134,7 +134,7 @@ Let's have a look at the captured traffic of Metasploit auxiliary scanner for th
 
 ```
 $ python3 fatt.py -r RDP/cve-2019-0708_metasploit_aux.pcap -p -j; cat fatt.log | python -m json.tool
-192.168.1.10:39079 -> 192.168.1.20:3389 [RDP] rdfp=525e1cb209280b81c24f1668dd55ed94 cookie="mstshash=user0" req_protocols=0x00000000
+192.168.1.10:39079 -> 192.168.1.20:3389 [RDP] rdfp=3ba3d115055e593e3550575a36e68153 cookie="mstshash=user0" req_protocols=0x00000000
 
 {
     "destinationIp": "192.168.1.20",
