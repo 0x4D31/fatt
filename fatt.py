@@ -56,6 +56,8 @@ class ProcessPackets:
     def process(self, packet):
         record = None
         proto = packet.highest_layer
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
 
         # Clear the dictionary used for extracting ssh protocol strings
         # and rdp cookies/negotiateRequests
@@ -70,9 +72,9 @@ class ProcessPackets:
             # Extract SSH identification string and correlate with KEXINIT msg
             if 'protocol' in packet.ssh.field_names:
                 key = '{}:{}_{}:{}'.format(
-                    packet.ip.src,
+                    sourceIp,
                     packet.tcp.srcport,
-                    packet.ip.dst,
+                    destinationIp,
                     packet.tcp.dstport)
                 self.protocol_dict[key] = packet.ssh.protocol
             if 'message_code' not in packet.ssh.field_names:
@@ -179,9 +181,9 @@ class ProcessPackets:
             key = None
             if 'rt_cookie' or 'negreq_requestedprotocols':
                 key = '{}:{}_{}:{}'.format(
-                    packet.ip.src,
+                    sourceIp,
                     packet.tcp.srcport,
-                    packet.ip.dst,
+                    destinationIp,
                     packet.tcp.dstport)
                 if 'rt_cookie' in packet.rdp.field_names:
                     cookie = packet.rdp.rt_cookie.replace('Cookie: ', '')
@@ -193,8 +195,8 @@ class ProcessPackets:
                     if req_protos != "0x00000000":
                         record = {
                             "timestamp": packet.sniff_time.isoformat(),
-                            "sourceIp": packet.ip.src,
-                            "destinationIp": packet.ip.dst,
+                            "sourceIp": sourceIp,
+                            "destinationIp": destinationIp,
                             "sourcePort": packet.tcp.srcport,
                             "destinationPort": packet.tcp.dstport,
                             "protocol": "rdp",
@@ -307,10 +309,12 @@ class ProcessPackets:
         HASSH = md5(KEX;EACTS;MACTS;CACTS)
         """
         protocol = None
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
         key = '{}:{}_{}:{}'.format(
-            packet.ip.src,
+            sourceIp,
             packet.tcp.srcport,
-            packet.ip.dst,
+            destinationIp,
             packet.tcp.dstport)
         if key in self.protocol_dict:
             protocol = self.protocol_dict[key]
@@ -343,8 +347,8 @@ class ProcessPackets:
         hassh = md5(hassh_str.encode()).hexdigest()
         record = {
             "timestamp": packet.sniff_time.isoformat(),
-            "sourceIp": packet.ip.src,
-            "destinationIp": packet.ip.dst,
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
             "sourcePort": packet.tcp.srcport,
             "destinationPort": packet.tcp.dstport,
             "protocol": 'ssh',
@@ -372,10 +376,12 @@ class ProcessPackets:
         HASSHServer = md5(KEX;EASTC;MASTC;CASTC)
         """
         protocol = None
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
         key = '{}:{}_{}:{}'.format(
-            packet.ip.src,
+            sourceIp,
             packet.tcp.srcport,
-            packet.ip.dst,
+            destinationIp,
             packet.tcp.dstport)
         if key in self.protocol_dict:
             protocol = self.protocol_dict[key]
@@ -408,8 +414,8 @@ class ProcessPackets:
         hasshs = md5(hasshs_str.encode()).hexdigest()
         record = {
             "timestamp": packet.sniff_time.isoformat(),
-            "sourceIp": packet.ip.src,
-            "destinationIp": packet.ip.dst,
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
             "sourcePort": packet.tcp.srcport,
             "destinationPort": packet.tcp.dstport,
             "protocol": 'ssh',
@@ -470,10 +476,12 @@ class ProcessPackets:
         ja3_string = ','.join([
             tls_version, ciphers, extensions, elliptic_curve, ec_pointformat])
         ja3 = md5(ja3_string.encode()).hexdigest()
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
         record = {
             "timestamp": packet.sniff_time.isoformat(),
-            "sourceIp": packet.ip.src,
-            "destinationIp": packet.ip.dst,
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
             "sourcePort": packet.tcp.srcport,
             "destinationPort": packet.tcp.dstport,
             "protocol": "tls",
@@ -515,10 +523,12 @@ class ProcessPackets:
         ja3s_string = ','.join([
             tls_version, ciphers, extensions])
         ja3s = md5(ja3s_string.encode()).hexdigest()
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
         record = {
             "timestamp": packet.sniff_time.isoformat(),
-            "sourceIp": packet.ip.src,
-            "destinationIp": packet.ip.dst,
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
             "sourcePort": packet.tcp.srcport,
             "destinationPort": packet.tcp.dstport,
             "protocol": "tls",
@@ -545,10 +555,12 @@ class ProcessPackets:
             connectionType = pad1Octet = clusterFlags = encryptionMethods = \
             extEncMethods = channelCount = channelDef = cookie = req_protos = ""
 
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
         key = '{}:{}_{}:{}'.format(
-            packet.ip.src,
+            sourceIp,
             packet.tcp.srcport,
-            packet.ip.dst,
+            destinationIp,
             packet.tcp.dstport)
         if key in self.rdp_dict and "cookie" in self.rdp_dict[key]:
             cookie = self.rdp_dict[key]["cookie"]
@@ -653,8 +665,8 @@ class ProcessPackets:
         rdfp = md5(rdfp_str.encode()).hexdigest()
         record = {
             "timestamp": packet.sniff_time.isoformat(),
-            "sourceIp": packet.ip.src,
-            "destinationIp": packet.ip.dst,
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
             "sourcePort": packet.tcp.srcport,
             "destinationPort": packet.tcp.dstport,
             "protocol": "rdp",
@@ -714,10 +726,12 @@ class ProcessPackets:
             requestMethod = packet.http.request_method
         client_header_ordering = ','.join(req_headers)
         client_header_hash = md5(client_header_ordering.encode('utf-8')).hexdigest()
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
         record = {
             "timestamp": packet.sniff_time.isoformat(),
-            "sourceIp": packet.ip.src,
-            "destinationIp": packet.ip.dst,
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
             "sourcePort": packet.tcp.srcport,
             "destinationPort": packet.tcp.dstport,
             "protocol": "http",
@@ -755,10 +769,12 @@ class ProcessPackets:
             responseCode = packet.http.response_code
         if 'content_length' in packet.http.field_names:
             contentLength = packet.http.content_length
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
         record = {
             "timestamp": packet.sniff_time.isoformat(),
-            "sourceIp": packet.ip.src,
-            "destinationIp": packet.ip.dst,
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
             "sourcePort": packet.tcp.srcport,
             "destinationPort": packet.tcp.dstport,
             "protocol": "http",
@@ -807,10 +823,12 @@ class ProcessPackets:
             copt = packet.gquic.tag_copt
         if 'tag_ccrt' in packet.gquic.field_names:
             ccrt = packet.gquic.tag_ccrt.raw_value
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
         record = {
             "timestamp": packet.sniff_time.isoformat(),
-            "sourceIp": packet.ip.src,
-            "destinationIp": packet.ip.dst,
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
             "sourcePort": packet.udp.srcport,
             "destinationPort": packet.udp.dstport,
             "protocol": "gquic",
@@ -843,11 +861,13 @@ def event_log(packet, event):
     if event == "retransmission":
         event_message = "This packet is a (suspected) retransmission"
     # Report the event (only for JSON output)
+    sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+    destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
     msg = {"timestamp": packet.sniff_time.isoformat(),
            "eventType": event,
            "eventMessage": event_message,
-           "sourceIp": packet.ip.src,
-           "destinationIp": packet.ip.dst,
+           "sourceIp": sourceIp,
+           "destinationIp": destinationIp,
            "sourcePort": packet.tcp.srcport,
            "destinationPort": packet.tcp.dstport}
     return msg
