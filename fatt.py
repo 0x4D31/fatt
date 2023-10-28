@@ -31,7 +31,8 @@ CAP_BPF_FILTER = (
 DISPLAY_FILTER = (
     'tls.handshake.type == 1 || tls.handshake.type == 2 ||'
     'ssh.message_code == 20 || ssh.protocol || rdp ||'
-    'gquic.tag == "CHLO" || http.request.method || data-text-lines'
+    '(quic && tls.handshake.type == 1) || gquic.tag == "CHLO" ||'
+    'http.request.method || data-text-lines'
 )
 DECODE_AS = {
     'tcp.port==2222': 'ssh', 'tcp.port==3389': 'tpkt',
@@ -279,15 +280,15 @@ class ProcessPackets:
                 self.logger.info(json.dumps(record))
             return
 
-        # [ QUIC ]
-        elif (proto == 'GQUIC' or proto == 'QUIC') and\
-                ('quic' in self.fingerprint or self.fingerprint == 'all'):
+        # [ GQUIC ]
+        elif proto == 'GQUIC' and ('gquic' in self.fingerprint or 
+                                    self.fingerprint == 'all'):
             if 'tag' in packet.gquic.field_names:
                 if packet.gquic.tag == 'CHLO':
                     record = self.client_gquic(packet)
                     # Print the result
                     if self.pout:
-                        tmp = ('{sip}:{sp} -> {dip}:{dp} [QUIC] UAID="{ua}" SNI={sn} AEAD={ea} KEXS={kex}')
+                        tmp = ('{sip}:{sp} -> {dip}:{dp} [GQUIC] UAID="{ua}" SNI={sn} AEAD={ea} KEXS={kex}')
                         tmp = tmp.format(
                             sip=record['sourceIp'],
                             sp=record['sourcePort'],
@@ -302,6 +303,29 @@ class ProcessPackets:
                 if record and self.jlog:
                     self.logger.info(json.dumps(record))
                 return
+            
+        # [ QUIC ]
+        elif proto == 'QUIC' and ('quic' in self.fingerprint or 
+                                  self.fingerprint == 'all'):
+
+            if packet.quic.tls_handshake_type == '1':
+                record = self.client_quic(packet)
+
+                if self.pout:
+                    tmp = ('{sip}:{sp} -> {dip}:{dp} [QUIC] serverName="{sn}" VER={ver}')
+                    tmp = tmp.format(
+                        sip=record['sourceIp'], 
+                        sp=record['sourcePort'],    
+                        dip=record['destinationIp'],
+                        dp=record['destinationPort'],
+                        ver=record['quic']['ver'],
+                        sn=record['quic']['sni']
+                    )
+                    print(tmp)
+                if record and self.jlog:
+                    self.logger.info(json.dumps(record))
+                return
+ 
         return
 
     def client_hassh(self, packet):
@@ -789,6 +813,33 @@ class ProcessPackets:
         }
         return record
 
+    def client_quic(self, packet):
+
+        ver = sni = None
+        print(packet.quic.pretty_print())
+
+        if 'version' in packet.quic.field_names:
+            ver = packet.quic.version
+        if 'tls_handshake_extensions_server_name' in packet.quic.field_names:
+            sni = packet.quic.tls_handshake_extensions_server_name
+
+        sourceIp = packet.ipv6.src if 'ipv6' in packet else packet.ip.src
+        destinationIp = packet.ipv6.dst if 'ipv6' in packet else packet.ip.dst
+        record = {
+            "timestamp": packet.sniff_time.isoformat(),
+            "sourceIp": sourceIp,
+            "destinationIp": destinationIp,
+            "sourcePort": packet.udp.srcport,
+            "destinationPort": packet.udp.dstport,
+            "protocol": "quic",
+            "quic": {
+                "ver": ver,
+                "sni": sni
+            }
+        }
+        return record
+
+
     def client_gquic(self, packet):
         # https://tools.ietf.org/html/draft-ietf-quic-transport-20
         sni = uaid = ver = stk = pdmd = ccs = ccrt = aead = scid = smhl = mids \
@@ -889,7 +940,7 @@ def parse_cmd_args():
         '--fingerprint',
         nargs='*',
         default='all',
-        choices=['tls', 'ssh', 'rdp', 'http', 'gquic'],
+        choices=['tls', 'ssh', 'rdp', 'http', 'gquic', 'quic'],
         help=helptxt)
     helptxt = "a dictionary of {decode_criterion_string: decode_as_protocol} \
         that is used to tell tshark to decode protocols in situations it \
